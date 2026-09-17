@@ -55,6 +55,6 @@ ForgeMind 是面向 Python / AI 应用开发者的项目级研发 Agent。V0.1 �
 
 已整合 03 第一版总体关系与 Bug 修复闭环。已讲解修改成功、测试通过与任务完成的区别，该题尚未独立作答，不标记为掌握。
 
-当前学习 06 数据结构设计（2026-09-17）：已确认 Agent Decision 不含 action_id，Runtime 接受后才分配。当前讨论 AcceptedAction 与嵌套参数是否应不可变；确认后实现 AcceptedReadFileToolAction。
+当前学习 06 数据结构设计（2026-09-17）：已实现 Runtime 的 read_file Decision→AcceptedAction 接受入口，并通过注入的 ID 生成器取得 action_id。当前只建立 ID 分配边界，持久化唯一性尚未实现。
 
 总体架构尚未定稿；暂不深入 06 的 Schema，也不开始编码。后续依次推进总体架构、Agent 架构深化、Tool 协议、数据结构，再进入 MVP 实现。每次先讨论确认并更新文档，再实现和验证。
