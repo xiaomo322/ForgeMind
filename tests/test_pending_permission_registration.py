@@ -164,7 +164,10 @@ def test_permission_request_registry_rejects_changed_action_snapshot() -> None:
         status="pending",
         action_type="tool_call",
         tool_name="read_file",
-        arguments={"path": "src/another.py"},
+        arguments={
+            "path": "src/another.py",
+            "expected_version": "sha256:abc",
+        },
         reason="不得把询问范围换成另一个文件",
         basis_ids=("permission-policy-001",),
     )

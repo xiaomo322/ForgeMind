@@ -52,7 +52,10 @@ def test_pending_read_file_permission_request_rejects_wrong_route_tags(
         "status": "pending",
         "action_type": "tool_call",
         "tool_name": "read_file",
-        "arguments": {"path": "src/private.py"},
+        "arguments": {
+            "path": "src/private.py",
+            "expected_version": "sha256:abc",
+        },
         "reason": "该路径需要用户确认",
         "basis_ids": ("permission-policy-001",),
     }
@@ -71,8 +74,26 @@ def test_pending_permission_request_requires_its_own_id() -> None:
             status="pending",
             action_type="tool_call",
             tool_name="read_file",
-            arguments={"path": "src/private.py"},
+            arguments={
+                "path": "src/private.py",
+                "expected_version": "sha256:abc",
+            },
             reason="该路径需要用户确认",
+            basis_ids=("permission-policy-001",),
+        )
+
+
+def test_pending_permission_request_requires_expected_file_version() -> None:
+    with pytest.raises(ValidationError):
+        PendingReadFilePermissionRequest(
+            permission_request_id="permission-request-001",
+            task_id="task-001",
+            action_id="action-001",
+            status="pending",
+            action_type="tool_call",
+            tool_name="read_file",
+            arguments={"path": "src/private.py"},
+            reason="授权必须绑定具体文件版本",
             basis_ids=("permission-policy-001",),
         )
 

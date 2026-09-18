@@ -1,4 +1,4 @@
-from forgemind.schema.observations import RejectedObservation
+from forgemind.schema.observations import TerminalObservation
 from forgemind.state.action_registry import InMemoryActionRegistry
 
 
@@ -23,10 +23,10 @@ class InMemoryObservationRegistry:
 
     def __init__(self, actions: InMemoryActionRegistry) -> None:
         self._actions = actions
-        self._observations: dict[str, RejectedObservation] = {}
+        self._observations: dict[str, TerminalObservation] = {}
 
-    def record(self, observation: RejectedObservation) -> None:
-        """为已注册 Action 记录执行前拒绝事实。"""
+    def record(self, observation: TerminalObservation) -> None:
+        """为已注册 Action 记录唯一终态事实。"""
 
         # 先确认来源 Action 存在。get 找不到时抛出的错误不能被吞掉，
         # 否则 State 会出现无法追溯到请求的孤立 Observation。
@@ -42,7 +42,7 @@ class InMemoryObservationRegistry:
 
         self._observations[observation.action_id] = observation
 
-    def get(self, action_id: str) -> RejectedObservation:
+    def get(self, action_id: str) -> TerminalObservation:
         """按 action_id 取得该 Action 的终态 Observation。"""
 
         return self._observations[action_id]

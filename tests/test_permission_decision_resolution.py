@@ -5,7 +5,6 @@ from forgemind.runtime.permissions import (
     resolve_registered_permission_decision,
 )
 from forgemind.schema.actions import AcceptedReadFileToolAction
-from forgemind.schema.observations import ObservationErrorCode
 from forgemind.schema.permissions import (
     PendingReadFilePermissionRequest,
     PermissionCheckOutcome,
@@ -22,12 +21,13 @@ from forgemind.state.permission_request_registry import (
 )
 
 
-def make_registered_decision(
-    decision: PermissionDecision,
+def make_state(
+    decision_value: PermissionDecision,
 ) -> tuple[
     AcceptedReadFileToolAction,
     InMemoryActionRegistry,
     InMemoryPermissionDecisionRegistry,
+    InMemoryObservationRegistry,
 ]:
     actions = InMemoryActionRegistry()
     action = AcceptedReadFileToolAction(
@@ -35,7 +35,11 @@ def make_registered_decision(
         task_id="task-001",
         action_type="tool_call",
         tool_name="read_file",
-        arguments={"path": "src/private.py"},
+        arguments={
+            "path": "src/private.py",
+            "max_lines": 50,
+            "expected_version": "sha256:v1",
+        },
         reason="读取受控文件",
     )
     actions.register(action)
@@ -44,11 +48,11 @@ def make_registered_decision(
     requests.register(
         PendingReadFilePermissionRequest(
             permission_request_id="permission-request-001",
-            task_id=action.task_id,
-            action_id=action.action_id,
+            task_id="task-001",
+            action_id="action-001",
             status="pending",
-            action_type=action.action_type,
-            tool_name=action.tool_name,
+            action_type="tool_call",
+            tool_name="read_file",
             arguments=action.arguments,
             reason="该路径需要用户确认",
             basis_ids=("permission-policy-001",),
@@ -60,47 +64,44 @@ def make_registered_decision(
         PermissionDecisionRecord(
             permission_decision_id="permission-decision-001",
             permission_request_id="permission-request-001",
-            task_id=action.task_id,
-            action_id=action.action_id,
-            decision=decision,
+            task_id="task-001",
+            action_id="action-001",
+            decision=decision_value,
             source="user",
-            raw_response="这是用户的明确决定",
+            raw_response="同意" if decision_value is PermissionDecision.APPROVE else "拒绝",
         )
     )
-    return action, actions, decisions
+    return action, actions, decisions, InMemoryObservationRegistry(actions)
 
 
-@pytest.mark.parametrize(
-    ("decision", "expected_outcome"),
-    [
-        (PermissionDecision.APPROVE, PermissionCheckOutcome.ALLOWED),
-        (PermissionDecision.REJECT, PermissionCheckOutcome.DENIED),
-    ],
-)
-def test_runtime_resolves_registered_user_decision_to_permission_outcome(
-    decision: PermissionDecision,
-    expected_outcome: PermissionCheckOutcome,
-) -> None:
-    action, _, decisions = make_registered_decision(decision)
+def test_approve_resumes_exact_registered_action_without_mutating_arguments() -> None:
+    original, actions, decisions, observations = make_state(
+        PermissionDecision.APPROVE
+    )
 
-    result = resolve_registered_permission_decision(
+    action, permission_check = resolve_registered_permission_decision(
         "permission-decision-001",
+        actions=actions,
         decisions=decisions,
     )
 
-    assert result.action_id == action.action_id
-    assert result.outcome is expected_outcome
-    assert result.basis_ids == ("permission-decision-001",)
+    assert action is original
+    assert action.arguments.max_lines == 50
+    assert permission_check.action_id == "action-001"
+    assert permission_check.outcome is PermissionCheckOutcome.ALLOWED
+    assert permission_check.basis_ids == ("permission-decision-001",)
+    with pytest.raises(KeyError):
+        observations.get("action-001")
 
 
-def test_rejected_user_decision_reaches_rejected_observation() -> None:
-    action, actions, decisions = make_registered_decision(
+def test_reject_flows_through_denied_to_rejected_observation() -> None:
+    original, actions, decisions, observations = make_state(
         PermissionDecision.REJECT
     )
-    observations = InMemoryObservationRegistry(actions)
 
-    permission_check = resolve_registered_permission_decision(
+    action, permission_check = resolve_registered_permission_decision(
         "permission-decision-001",
+        actions=actions,
         decisions=decisions,
     )
     rejected = record_permission_rejection(
@@ -109,17 +110,19 @@ def test_rejected_user_decision_reaches_rejected_observation() -> None:
         observations=observations,
     )
 
-    assert rejected.status == "rejected"
-    assert rejected.error.code is ObservationErrorCode.PERMISSION_DENIED
+    assert action is original
+    assert permission_check.outcome is PermissionCheckOutcome.DENIED
+    assert rejected.action_id == "action-001"
     assert rejected.error.details[0].value == "permission-decision-001"
-    assert observations.get(action.action_id) is rejected
+    assert observations.get("action-001") is rejected
 
 
-def test_runtime_rejects_unknown_permission_decision_id() -> None:
-    _, _, decisions = make_registered_decision(PermissionDecision.APPROVE)
+def test_unregistered_permission_decision_cannot_resume_action() -> None:
+    _, actions, decisions, _ = make_state(PermissionDecision.APPROVE)
 
     with pytest.raises(KeyError):
         resolve_registered_permission_decision(
             "permission-decision-999",
+            actions=actions,
             decisions=decisions,
         )

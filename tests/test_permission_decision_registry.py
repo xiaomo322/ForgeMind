@@ -29,7 +29,10 @@ def make_registries() -> tuple[
         task_id="task-001",
         action_type="tool_call",
         tool_name="read_file",
-        arguments={"path": "src/private.py"},
+        arguments={
+            "path": "src/private.py",
+            "expected_version": "sha256:v1",
+        },
         reason="读取受控文件",
     )
     actions.register(action)

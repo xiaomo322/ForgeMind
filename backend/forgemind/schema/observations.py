@@ -4,12 +4,14 @@ from typing import Literal
 from pydantic import Field
 
 from forgemind.schema.base import StrictContractModel
+from forgemind.schema.read_file import ReadFileResult
 
 
 class ObservationErrorCode(StrEnum):
     """Runtime/Tool Observation 使用的稳定错误码。"""
 
     PERMISSION_DENIED = "PERMISSION_DENIED"
+    VERSION_MISMATCH = "VERSION_MISMATCH"
 
 
 class ObservationErrorDetail(StrictContractModel):
@@ -35,3 +37,24 @@ class RejectedObservation(StrictContractModel):
     action_id: str = Field(min_length=1)
     status: Literal["rejected"]
     error: ObservationError
+
+
+class FailedObservation(StrictContractModel):
+    """Tool 已被调用，但没有产生成功结果时形成的事实记录。"""
+
+    action_id: str = Field(min_length=1)
+    status: Literal["failed"]
+    error: ObservationError
+
+
+class ReadFileSuccessObservation(StrictContractModel):
+    """read_file 成功执行并取得实际结果后形成的事实记录。"""
+
+    action_id: str = Field(min_length=1)
+    status: Literal["success"]
+    result: ReadFileResult
+
+
+TerminalObservation = (
+    RejectedObservation | FailedObservation | ReadFileSuccessObservation
+)

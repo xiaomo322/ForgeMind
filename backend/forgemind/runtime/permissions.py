@@ -15,6 +15,7 @@ from forgemind.schema.permissions import (
     PermissionCheckResult,
     PermissionDecision,
 )
+from forgemind.state.action_registry import InMemoryActionRegistry
 from forgemind.state.observation_registry import InMemoryObservationRegistry
 from forgemind.state.permission_decision_registry import (
     InMemoryPermissionDecisionRegistry,
@@ -84,13 +85,18 @@ def create_and_register_pending_read_file_permission_request(
 def resolve_registered_permission_decision(
     permission_decision_id: str,
     *,
+    actions: InMemoryActionRegistry,
     decisions: InMemoryPermissionDecisionRegistry,
-) -> PermissionCheckResult:
-    """把 State 中的用户决定转换为下一步使用的权限结论。"""
+) -> tuple[AcceptedReadFileToolAction, PermissionCheckResult]:
+    """取回权威 Action，并把已登记用户决定转换为权限结论。"""
 
     # 只按编号读取已经登记的权威记录。调用方不能把一条尚未写入
     # State 的临时“同意”或“拒绝”直接送入执行链路。
     decision = decisions.get(permission_decision_id)
+
+    # 后续流程必须继续使用 State 中原来登记的不可变 Action。只返回
+    # action_id 会让调用方有机会传入同编号、但参数已扩大的伪造副本。
+    action = actions.get(decision.action_id)
 
     if decision.decision is PermissionDecision.APPROVE:
         outcome = PermissionCheckOutcome.ALLOWED
@@ -101,12 +107,13 @@ def resolve_registered_permission_decision(
 
     # 用户决定只恢复权限分支。allowed 后仍需继续执行版本、安全和
     # 环境检查；这里不调用 Tool，也不生成成功 Observation。
-    return PermissionCheckResult(
-        action_id=decision.action_id,
+    permission_check = PermissionCheckResult(
+        action_id=action.action_id,
         outcome=outcome,
         reason=reason,
         basis_ids=(decision.permission_decision_id,),
     )
+    return action, permission_check
 
 
 def record_permission_rejection(

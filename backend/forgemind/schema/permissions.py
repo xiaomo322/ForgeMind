@@ -1,9 +1,9 @@
 """Runtime 权限检查使用的严格数据契约。"""
 
 from enum import StrEnum
-from typing import Annotated, Literal
+from typing import Annotated, Literal, Self
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from forgemind.schema.base import StrictContractModel
 from forgemind.schema.read_file import ReadFileArguments
@@ -54,6 +54,14 @@ class PendingReadFilePermissionRequest(StrictContractModel):
     arguments: ReadFileArguments
     reason: str = Field(min_length=1)
     basis_ids: tuple[NonEmptyBasisId, ...] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def require_expected_version(self) -> Self:
+        """权限确认必须绑定用户看到并批准的具体文件版本。"""
+
+        if self.arguments.expected_version is None:
+            raise ValueError("待确认读取请求必须提供 expected_version")
+        return self
 
 
 class PermissionDecision(StrEnum):

@@ -24,3 +24,16 @@ class ReadFileArguments(StrictContractModel):
     # 读取时版本可省略；一旦提供就不能为空。它是否与当前文件匹配，
     # 属于 Runtime 的动态事实检查，不属于纯 Schema 校验。
     expected_version: str | None = Field(default=None, min_length=1)
+
+
+class ReadFileResult(StrictContractModel):
+    """read_file 从同一已验证文本快照返回的实际行范围。"""
+
+    path: str = Field(min_length=1)
+    content: str
+    start_line: int = Field(ge=1)
+    end_line: int | None = Field(default=None, ge=1)
+    returned_lines: int = Field(ge=0)
+    eof: bool
+    version: str = Field(min_length=1)
+    is_truncated: bool
