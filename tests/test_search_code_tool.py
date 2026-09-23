@@ -1,11 +1,14 @@
 from pathlib import Path
 
+import pytest
+
 from forgemind.schema.search_code import (
     SearchCodeArguments,
     SearchIncompleteReason,
 )
 from forgemind.tools.search_code import (
     MAX_SEARCH_FILE_BYTES,
+    SearchScopeNotFoundError,
     search_python_code,
 )
 
@@ -156,3 +159,18 @@ def test_search_skips_non_utf8_file(tmp_path: Path) -> None:
     assert result.incomplete_reasons == (
         SearchIncompleteReason.FILE_SKIPPED,
     )
+
+
+def test_search_reports_missing_scope_as_tool_failure(tmp_path: Path) -> None:
+    root = tmp_path / "project"
+    root.mkdir()
+    missing = root / "missing"
+
+    with pytest.raises(SearchScopeNotFoundError) as captured:
+        search_python_code(
+            root,
+            missing,
+            SearchCodeArguments(query="discount", scope="missing"),
+        )
+
+    assert captured.value.scope == missing

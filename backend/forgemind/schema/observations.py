@@ -5,6 +5,7 @@ from pydantic import Field
 
 from forgemind.schema.base import StrictContractModel
 from forgemind.schema.read_file import ReadFileResult
+from forgemind.schema.search_code import SearchCodeResult
 
 
 class ObservationErrorCode(StrEnum):
@@ -19,6 +20,9 @@ class ObservationErrorCode(StrEnum):
     INVALID_TEXT_ENCODING = "INVALID_TEXT_ENCODING"
     START_LINE_OUT_OF_RANGE = "START_LINE_OUT_OF_RANGE"
     VERSION_MISMATCH = "VERSION_MISMATCH"
+    UNSUPPORTED_SEARCH_SCOPE = "UNSUPPORTED_SEARCH_SCOPE"
+    SEARCH_SCOPE_NOT_FOUND = "SEARCH_SCOPE_NOT_FOUND"
+    SEARCH_FAILED = "SEARCH_FAILED"
 
 
 class ObservationErrorDetail(StrictContractModel):
@@ -62,6 +66,17 @@ class ReadFileSuccessObservation(StrictContractModel):
     result: ReadFileResult
 
 
+class SearchCodeSuccessObservation(StrictContractModel):
+    """search_code 成功执行并取得实际结果后形成的事实记录。"""
+
+    action_id: str = Field(min_length=1)
+    status: Literal["success"]
+    result: SearchCodeResult
+
+
 TerminalObservation = (
-    RejectedObservation | FailedObservation | ReadFileSuccessObservation
+    RejectedObservation
+    | FailedObservation
+    | ReadFileSuccessObservation
+    | SearchCodeSuccessObservation
 )

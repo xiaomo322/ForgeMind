@@ -59,12 +59,12 @@ docs/         # 01–16 正式设计文档和开发日志
 - 权限检查三态、用户确认请求、用户决定及引用校验；
 - rejected / failed Observation 及不可覆盖的终态登记；
 - read_file 的安全路径解析、受限字节读取、首次版本建立、已有版本校验、按行分段和三类终态登记。
-- search_code 的严格契约、Action 登记、安全范围解析，以及受限且顺序确定的 Python 源码文本搜索。
+- search_code 的严格契约、Action 登记、安全范围解析、受限文本搜索和 success/rejected/failed 终态登记。
 
-search_code、持久化 State 及完整 Agent Loop 尚未实现。
+edit_file、run_tests、持久化 State 及完整 Agent Loop 尚未实现。
 
 ## 当前学习进度
 
-当前学习 `06-数据结构设计`（更新于 2026-09-23）。read_file V0.1 已完成；search_code 已完成严格契约、Action 登记、安全范围解析和核心搜索 Tool，下一步连接 Observation 与统一 Runtime 执行入口。当前完整测试 156 项通过。详细设计演进见 `docs/06-数据结构设计.md`，逐步开发记录见 `docs/16-项目开发日志.md`。
+当前学习 `06-数据结构设计`（更新于 2026-09-23）。read_file V0.1 与 search_code V0.1 均已完成并接入 Runtime/State；下一步进入 edit_file 的版本绑定修改闭环。当前完整测试 164 项通过。详细设计演进见 `docs/06-数据结构设计.md`，逐步开发记录见 `docs/16-项目开发日志.md`。
 
 每个切片只处理一个主要概念，并明确留出核心代码由用户先写；AI 提供脚手架、测试和基于真实错误的 Debug 支持。

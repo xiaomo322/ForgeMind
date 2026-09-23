@@ -1,5 +1,6 @@
 """在受控资源范围内执行大小写敏感的 Python 源码文本搜索。"""
 
+import os
 from pathlib import Path
 
 from forgemind.schema.search_code import (
@@ -16,6 +17,18 @@ IGNORED_DIRECTORY_NAMES = frozenset(
 )
 
 
+class SearchCodeToolError(Exception):
+    """search_code 在 Tool 执行阶段产生的领域错误。"""
+
+
+class SearchScopeNotFoundError(SearchCodeToolError):
+    """真正执行搜索时，已确认安全的 scope 不存在。"""
+
+    def __init__(self, scope: Path) -> None:
+        self.scope = scope
+        super().__init__("搜索范围不存在")
+
+
 def _collect_python_candidates(
     project_root: Path,
     resolved_scope: Path,
@@ -26,7 +39,23 @@ def _collect_python_candidates(
     if resolved_scope.is_file():
         raw_candidates = (resolved_scope,)
     else:
-        raw_candidates = resolved_scope.rglob("*.py")
+        collected_paths: list[Path] = []
+        for directory, directory_names, file_names in os.walk(
+            resolved_scope,
+            followlinks=False,
+        ):
+            # 在继续向下遍历前原地移除受控目录，避免先扫描再过滤。
+            directory_names[:] = sorted(
+                name
+                for name in directory_names
+                if name not in IGNORED_DIRECTORY_NAMES
+            )
+            collected_paths.extend(
+                Path(directory) / name
+                for name in file_names
+                if Path(name).suffix == ".py"
+            )
+        raw_candidates = tuple(collected_paths)
 
     candidates: list[Path] = []
     for candidate in raw_candidates:
@@ -79,6 +108,11 @@ def search_python_code(
     arguments: SearchCodeArguments,
 ) -> SearchCodeResult:
     """在已经过 Runtime 范围检查的 scope 中搜索普通文本。"""
+
+    # 安全检查只证明路径位于项目内；存在性必须由真正执行的 Tool
+    # 报告，避免 Runtime 在 Tool 调用前伪造 failed 状态。
+    if not resolved_scope.exists():
+        raise SearchScopeNotFoundError(resolved_scope)
 
     # 第一步：取得按项目相对路径排序的 Python 候选文件。
     resolved_root = project_root.resolve()

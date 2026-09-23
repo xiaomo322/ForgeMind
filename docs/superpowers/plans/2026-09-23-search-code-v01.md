@@ -393,7 +393,7 @@ Run full: `F:\anaconda3\python.exe -m pytest -q -p no:cacheprovider --basetemp .
 
 稳定错误码固定为：项目外路径复用 `PATH_OUTSIDE_PROJECT`；非 `.py` 单文件使用 `UNSUPPORTED_SEARCH_SCOPE`；scope 不存在使用 `SEARCH_SCOPE_NOT_FOUND`；无法启动或完成根 scope 搜索使用 `SEARCH_FAILED`。候选文件被跳过属于成功结果中的 `FILE_SKIPPED`，不转成顶层 failed。
 
-- [ ] **Step 1: 写执行流失败测试**
+- [x] **Step 1: 写执行流失败测试**
 
 ```python
 def test_execute_search_code_records_success(tmp_path: Path) -> None:
@@ -416,13 +416,13 @@ def test_execute_search_code_records_success(tmp_path: Path) -> None:
 
 另写零匹配 success、`../outside` rejected、`README.md` rejected 和不存在 scope failed 用例，每条均断言稳定错误码或 success result，并确认 Registry 中只有该终态。
 
-- [ ] **Step 2: 运行 RED 测试**
+- [x] **Step 2: 运行 RED 测试**
 
 Run: `F:\anaconda3\python.exe -m pytest -q -p no:cacheprovider --basetemp .test-tmp\search-flow tests\test_search_code_execution_flow.py`
 
 Expected: FAIL，因为 search_code Observation 和执行入口尚不存在。
 
-- [ ] **Step 3: 实现 Observation 和执行顺序**
+- [x] **Step 3: 实现 Observation 和执行顺序**
 
 ```text
 安全范围解析失败 → rejected
@@ -432,11 +432,11 @@ scope 不存在或 Tool 无法搜索 → failed
 
 执行入口必须先登记 State，再向 Agent 返回同一个 Observation。
 
-- [ ] **Step 4: 学习者编写模块级测试**
+- [x] **Step 4: 学习者编写模块级测试**
 
 测试真实目录中多个 `.py` 文件的确定排序、返回上限、`is_complete` 和 State 对象身份。
 
-- [ ] **Step 5: 运行聚焦与完整测试并归档**
+- [x] **Step 5: 运行聚焦与完整测试并归档**
 
 Run focused: `F:\anaconda3\python.exe -m pytest -q -p no:cacheprovider --basetemp .test-tmp\search-flow tests\test_search_code_execution_flow.py tests\test_search_code_runtime_module_flow.py`
 
@@ -444,6 +444,6 @@ Run full: `F:\anaconda3\python.exe -m pytest -q -p no:cacheprovider --basetemp .
 
 把真实测试数量和已完成边界追加到 `docs/06-数据结构设计.md` 与 `docs/16-项目开发日志.md`，并更新 README 当前进度。
 
-- [ ] **Step 6: 提交检查点**
+- [x] **Step 6: 提交检查点**
 
 `git commit -m "feat: complete search code runtime flow"`
