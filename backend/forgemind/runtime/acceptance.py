@@ -1,8 +1,14 @@
 from collections.abc import Callable
 
 from forgemind.runtime.ids import new_action_id
-from forgemind.schema.actions import AcceptedReadFileToolAction
-from forgemind.schema.decisions import ReadFileToolCallDecision
+from forgemind.schema.actions import (
+    AcceptedReadFileToolAction,
+    AcceptedSearchCodeToolAction,
+)
+from forgemind.schema.decisions import (
+    ReadFileToolCallDecision,
+    SearchCodeToolCallDecision,
+)
 from forgemind.state.action_registry import (
     DuplicateActionIdError,
     InMemoryActionRegistry,
@@ -73,4 +79,51 @@ def accept_and_register_read_file_decision(
         return action
 
     # 必须设置上限，防止错误生成器一直返回同一个编号导致死循环。
+    raise ActionIdAllocationError(max_id_attempts)
+
+
+def accept_search_code_decision(
+    decision: SearchCodeToolCallDecision,
+    *,
+    task_id: str,
+    next_action_id: ActionIdFactory = new_action_id,
+) -> AcceptedSearchCodeToolAction:
+    """把已校验的 search_code 决策转换为 Runtime 权威 Action。"""
+
+    # 第一步：调用 Runtime 的编号工厂取得 action_id，不能从 Decision 读取。
+    action_id = next_action_id()
+    # 第二步：构造 AcceptedSearchCodeToolAction，增加 action_id 和 task_id。
+    # 第三步：原样保留已校验的路由标签、arguments 对象和 reason 后返回。
+    return AcceptedSearchCodeToolAction(
+        action_id=action_id,
+        task_id=task_id,
+        action_type=decision.action_type,
+        tool_name=decision.tool_name,
+        arguments=decision.arguments,
+        reason=decision.reason,
+    )
+
+
+def accept_and_register_search_code_decision(
+    decision: SearchCodeToolCallDecision,
+    *,
+    task_id: str,
+    registry: InMemoryActionRegistry,
+    next_action_id: ActionIdFactory = new_action_id,
+    max_id_attempts: int = 3,
+) -> AcceptedSearchCodeToolAction:
+    """接受并注册 search_code 决策；编号冲突时有限重试。"""
+
+    for _ in range(max_id_attempts):
+        action = accept_search_code_decision(
+            decision,
+            task_id=task_id,
+            next_action_id=next_action_id,
+        )
+        try:
+            registry.register(action)
+        except DuplicateActionIdError:
+            continue
+        return action
+
     raise ActionIdAllocationError(max_id_attempts)

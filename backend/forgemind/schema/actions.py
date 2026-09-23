@@ -4,6 +4,7 @@ from pydantic import Field
 
 from forgemind.schema.base import StrictContractModel
 from forgemind.schema.read_file import ReadFileArguments
+from forgemind.schema.search_code import SearchCodeArguments
 
 
 class AcceptedReadFileToolAction(StrictContractModel):
@@ -20,3 +21,17 @@ class AcceptedReadFileToolAction(StrictContractModel):
     tool_name: Literal["read_file"]
     arguments: ReadFileArguments
     reason: str = Field(min_length=1)
+
+
+class AcceptedSearchCodeToolAction(StrictContractModel):
+    """Runtime 接受 search_code 决策后形成的权威执行记录。"""
+
+    action_id: str = Field(min_length=1)
+    task_id: str = Field(min_length=1)
+    action_type: Literal["tool_call"]
+    tool_name: Literal["search_code"]
+    arguments: SearchCodeArguments
+    reason: str = Field(min_length=1)
+
+
+AcceptedToolAction = AcceptedReadFileToolAction | AcceptedSearchCodeToolAction

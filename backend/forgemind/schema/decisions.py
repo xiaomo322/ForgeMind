@@ -4,6 +4,7 @@ from pydantic import Field
 
 from forgemind.schema.base import StrictContractModel
 from forgemind.schema.read_file import ReadFileArguments
+from forgemind.schema.search_code import SearchCodeArguments
 
 
 class ReadFileToolCallDecision(StrictContractModel):
@@ -19,4 +20,13 @@ class ReadFileToolCallDecision(StrictContractModel):
     arguments: ReadFileArguments
 
     # reason 供审查和上下文使用，但不能替代 arguments 或执行授权。
+    reason: str = Field(min_length=1)
+
+
+class SearchCodeToolCallDecision(StrictContractModel):
+    """Agent 请求调用 search_code 时必须产生的完整决策结构。"""
+
+    action_type: Literal["tool_call"]
+    tool_name: Literal["search_code"]
+    arguments: SearchCodeArguments
     reason: str = Field(min_length=1)

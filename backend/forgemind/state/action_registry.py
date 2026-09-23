@@ -1,4 +1,4 @@
-from forgemind.schema.actions import AcceptedReadFileToolAction
+from forgemind.schema.actions import AcceptedToolAction
 
 
 class DuplicateActionIdError(ValueError):
@@ -13,9 +13,9 @@ class InMemoryActionRegistry:
     """V0.1 单进程内存 Action 注册表。"""
 
     def __init__(self) -> None:
-        self._actions: dict[str, AcceptedReadFileToolAction] = {}
+        self._actions: dict[str, AcceptedToolAction] = {}
 
-    def register(self, action: AcceptedReadFileToolAction) -> None:
+    def register(self, action: AcceptedToolAction) -> None:
         """注册新 Action；重复编号时保留原记录并明确失败。"""
 
         # 不能使用普通赋值直接覆盖。一个 action_id 必须永远指向同一份
@@ -25,7 +25,7 @@ class InMemoryActionRegistry:
 
         self._actions[action.action_id] = action
 
-    def get(self, action_id: str) -> AcceptedReadFileToolAction:
+    def get(self, action_id: str) -> AcceptedToolAction:
         """按权威编号取得已注册 Action。"""
 
         return self._actions[action_id]

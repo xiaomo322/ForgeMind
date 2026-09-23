@@ -175,7 +175,7 @@ Run full: `F:\anaconda3\python.exe -m pytest -q -p no:cacheprovider --basetemp .
 - Consumes: `SearchCodeArguments`。
 - Produces: `SearchCodeToolCallDecision`、`AcceptedSearchCodeToolAction`、`accept_and_register_search_code_decision`。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```python
 def test_runtime_accepts_and_registers_search_decision() -> None:
@@ -198,13 +198,13 @@ def test_runtime_accepts_and_registers_search_decision() -> None:
 
 另写测试给 Decision 传 `action_id` 并断言 `ValidationError`；预先注册相同 ID 后让生成器依次返回重复值和新值，断言最终登记新 ID。
 
-- [ ] **Step 2: 运行 RED 测试**
+- [x] **Step 2: 运行 RED 测试**
 
 Run: `F:\anaconda3\python.exe -m pytest -q -p no:cacheprovider --basetemp .test-tmp\search-action tests\test_search_code_action_flow.py`
 
 Expected: FAIL，因为 search_code Decision、Action 和接受函数尚不存在。
 
-- [ ] **Step 3: 实现路由模型和接受入口**
+- [x] **Step 3: 实现路由模型和接受入口**
 
 ```python
 class SearchCodeToolCallDecision(StrictContractModel):
@@ -247,13 +247,13 @@ def accept_search_code_decision(
 
 注册函数使用与 read_file 相同的最多三次 ID 冲突重试，但调用 `accept_search_code_decision`。
 
-- [ ] **Step 4: 运行聚焦与完整测试**
+- [x] **Step 4: 运行聚焦与完整测试**
 
 Run focused: `F:\anaconda3\python.exe -m pytest -q -p no:cacheprovider --basetemp .test-tmp\search-action tests\test_search_code_action_flow.py`
 
 Run full: `F:\anaconda3\python.exe -m pytest -q -p no:cacheprovider --basetemp .test-tmp\full-suite`
 
-- [ ] **Step 5: 提交检查点**
+- [x] **Step 5: 提交检查点**
 
 `git commit -m "feat: accept and register search code actions"`
 
