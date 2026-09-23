@@ -31,7 +31,7 @@
 - Consumes: `StrictContractModel`。
 - Produces: `DEFAULT_SEARCH_RESULTS = 20`、`MAX_SEARCH_RESULTS = 100`、`SearchCodeArguments`。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```python
 def test_search_arguments_apply_controlled_defaults() -> None:
@@ -50,13 +50,13 @@ def test_search_arguments_reject_result_limit_outside_bounds(
 
 增加参数化测试，分别传入 `{"query": ""}`、`{"query": "x", "scope": ""}`、`{"query": 123}`、`{"query": "x", "max_results": "20"}` 和 `{"query": "x", "unknown": True}`，每组都断言抛出 `ValidationError`。
 
-- [ ] **Step 2: 运行 RED 测试**
+- [x] **Step 2: 运行 RED 测试**
 
 Run: `F:\anaconda3\python.exe -m pytest -q -p no:cacheprovider --basetemp .test-tmp\search-arguments tests\test_search_code_arguments.py`
 
 Expected: FAIL，因为 `SearchCodeArguments` 尚不存在或没有字段约束。
 
-- [ ] **Step 3: 学习者实现最小 Schema**
+- [x] **Step 3: 学习者实现最小 Schema**
 
 ```python
 DEFAULT_SEARCH_RESULTS = 20
@@ -73,11 +73,11 @@ class SearchCodeArguments(StrictContractModel):
     )
 ```
 
-- [ ] **Step 4: 运行聚焦与完整测试**
+- [x] **Step 4: 运行聚焦与完整测试**
 
 Expected: 新测试全部通过，完整测试不少于 122 项通过。
 
-- [ ] **Step 5: 提交检查点**
+- [x] **Step 5: 提交检查点**
 
 `git commit -m "feat: add search code argument contract"`
 
