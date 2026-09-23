@@ -1,6 +1,9 @@
 """search_code 输入与结果使用的严格数据契约。"""
 
-from pydantic import Field
+from enum import StrEnum
+from typing import Self
+
+from pydantic import Field, model_validator
 
 from forgemind.schema.base import StrictContractModel
 
@@ -29,3 +32,59 @@ class SearchCodeArguments(StrictContractModel):
         ge=1,
         le=MAX_SEARCH_RESULTS,
     )
+
+
+class SearchIncompleteReason(StrEnum):
+    """search_code 成功执行但结果未完整覆盖的稳定原因。"""
+
+    RESULT_LIMIT_REACHED = "RESULT_LIMIT_REACHED"
+    FILE_SKIPPED = "FILE_SKIPPED"
+
+
+class SearchCodeMatch(StrictContractModel):
+    """search_code 实际返回的一条字面文本命中。"""
+
+    # 第一步：声明非空项目相对路径 path。
+    path: str = Field(min_length=1)
+
+    # 第二步：声明从 1 开始的 line_number。
+    line_number: int = Field(ge=1)
+
+    # 第三步：声明实际匹配行 line_text；空字符串也保留为字符串类型，
+    # 是否真的包含 query 由 Tool 构造结果时保证。
+    line_text: str
+
+
+class SearchCodeResult(StrictContractModel):
+    """一次成功 search_code 调用取得的实际结果。"""
+
+    # 第一步：声明原 query、实际 searched_scope 和不可变 matches。
+    query: str = Field(min_length=1)
+    searched_scope: str = Field(min_length=1)
+    matches: tuple[SearchCodeMatch, ...]
+
+    # 第二步：声明 returned_count、is_complete 和不可变原因集合。
+    returned_count: int = Field(ge=0)
+    is_complete: bool
+    incomplete_reasons: tuple[SearchIncompleteReason, ...]
+
+    # 第三步：使用 after validator 检查 returned_count 等于 matches 长度。
+    @model_validator(mode="after")
+    def validate_result_consistency(self) -> Self:
+        if self.returned_count != len(self.matches):
+            raise ValueError(
+                "returned_count 必须等于 matches 数量"
+            )
+
+        # 第四步：完整结果必须没有原因；不完整结果必须至少有一个原因。
+        if self.is_complete and self.incomplete_reasons:
+            raise ValueError(
+                "完整结果不能包含 incomplete_reasons"
+            )
+
+        if not self.is_complete and not self.incomplete_reasons:
+            raise ValueError(
+                "不完整结果必须说明原因"
+            )
+
+        return self

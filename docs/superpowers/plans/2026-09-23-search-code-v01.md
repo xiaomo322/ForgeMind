@@ -91,7 +91,7 @@ Expected: 新测试全部通过，完整测试不少于 122 项通过。
 - Consumes: `SearchCodeArguments` 的 query/scope/max_results 语义。
 - Produces: `SearchIncompleteReason`、`SearchCodeMatch`、`SearchCodeResult`。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 测试以下规则：line_number 从 1 开始；`returned_count == len(matches)`；完整结果没有 incomplete_reasons；不完整结果至少有一个原因；零匹配且完整是合法 success result。
 
@@ -109,13 +109,13 @@ assert result.matches == ()
 
 再构造 `returned_count=1, matches=()`、`is_complete=True` 且带原因、`is_complete=False` 且原因为空三种对象，分别断言 `ValidationError`；构造 `SearchCodeMatch(path="a.py", line_number=0, line_text="x")` 并断言拒绝。
 
-- [ ] **Step 2: 运行 RED 测试**
+- [x] **Step 2: 运行 RED 测试**
 
 Run: `F:\anaconda3\python.exe -m pytest -q -p no:cacheprovider --basetemp .test-tmp\search-result tests\test_search_code_result.py`
 
 Expected: FAIL，因为结果类型尚不存在。
 
-- [ ] **Step 3: 实现严格结果模型**
+- [x] **Step 3: 实现严格结果模型**
 
 ```python
 class SearchIncompleteReason(StrEnum):
@@ -152,13 +152,13 @@ def validate_result_consistency(self) -> Self:
     return self
 ```
 
-- [ ] **Step 4: 运行聚焦与完整测试**
+- [x] **Step 4: 运行聚焦与完整测试**
 
 Run focused: `F:\anaconda3\python.exe -m pytest -q -p no:cacheprovider --basetemp .test-tmp\search-result tests\test_search_code_result.py`
 
 Run full: `F:\anaconda3\python.exe -m pytest -q -p no:cacheprovider --basetemp .test-tmp\full-suite`
 
-- [ ] **Step 5: 提交检查点**
+- [x] **Step 5: 提交检查点**
 
 `git commit -m "feat: define search code result contract"`
 
