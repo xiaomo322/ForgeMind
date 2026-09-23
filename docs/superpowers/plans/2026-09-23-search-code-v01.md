@@ -327,7 +327,7 @@ Run full: `F:\anaconda3\python.exe -m pytest -q -p no:cacheprovider --basetemp .
 - Consumes: `SearchCodeArguments`、`SearchCodeMatch`、`SearchCodeResult` 和已经解析的 scope。
 - Produces: `search_python_code(project_root: Path, resolved_scope: Path, arguments: SearchCodeArguments) -> SearchCodeResult`。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```python
 def test_search_python_code_returns_deterministic_matches(tmp_path: Path) -> None:
@@ -346,13 +346,13 @@ def test_search_python_code_returns_deterministic_matches(tmp_path: Path) -> Non
 
 分别增加大小写不匹配、忽略目录、零匹配、三条命中但 max_results=2、65537 字节文件和非法 UTF-8 文件用例；后两种断言 `FILE_SKIPPED in incomplete_reasons`。
 
-- [ ] **Step 2: 运行 RED 测试**
+- [x] **Step 2: 运行 RED 测试**
 
 Run: `F:\anaconda3\python.exe -m pytest -q -p no:cacheprovider --basetemp .test-tmp\search-tool tests\test_search_code_tool.py`
 
 Expected: FAIL，因为 `search_python_code` 尚不存在。
 
-- [ ] **Step 3: 实现候选收集和逐行搜索**
+- [x] **Step 3: 实现候选收集和逐行搜索**
 
 实现常量：
 
@@ -365,13 +365,13 @@ IGNORED_DIRECTORY_NAMES = frozenset(
 
 核心顺序：规范化 project_root；收集 `.py` 候选；排除忽略目录；按相对 POSIX 路径排序；逐个确认 resolve 后仍在根目录内；最多读取 65537 bytes；UTF-8 解码；使用 splitlines 逐行做 `query in line_text`；保存前 max_results 条，但扫描到第 max_results+1 条后立即标记 RESULT_LIMIT_REACHED。
 
-- [ ] **Step 4: 运行聚焦与完整测试**
+- [x] **Step 4: 运行聚焦与完整测试**
 
 Run focused: `F:\anaconda3\python.exe -m pytest -q -p no:cacheprovider --basetemp .test-tmp\search-tool tests\test_search_code_tool.py`
 
 Run full: `F:\anaconda3\python.exe -m pytest -q -p no:cacheprovider --basetemp .test-tmp\full-suite`
 
-- [ ] **Step 5: 提交检查点**
+- [x] **Step 5: 提交检查点**
 
 `git commit -m "feat: search Python source with bounded resources"`
 
