@@ -1,11 +1,98 @@
 """read_file 对已验证文本快照进行分段返回的核心逻辑。"""
 
+from pathlib import Path
+
 from forgemind.schema.read_file import ReadFileResult
+
+
+MAX_READ_BYTES = 64 * 1024
+
+
+class ReadFileToolError(Exception):
+    """read_file Tool 在读取文件字节阶段的领域错误。"""
+
+    def __init__(self, path: Path, message: str) -> None:
+        self.path = path
+        super().__init__(message)
+
+
+class ReadFileNotFoundError(ReadFileToolError):
+    """目标文件在真正读取时不存在。"""
+
+
+class ReadFileTargetIsDirectoryError(ReadFileToolError):
+    """目标是目录，不能作为普通文件读取。"""
+
+
+class ReadFileTooLargeError(ReadFileToolError):
+    """文件内容超过 read_file 的字节硬上限。"""
+
+    def __init__(
+        self,
+        path: Path,
+        *,
+        max_bytes: int,
+        observed_bytes: int,
+    ) -> None:
+        self.max_bytes = max_bytes
+        self.observed_bytes = observed_bytes
+        super().__init__(path, "文件内容超过 read_file 字节上限")
+
+
+class ReadFileSystemError(ReadFileToolError):
+    """文件存在性和目录类型之外的操作系统读取错误。"""
+
+    def __init__(self, path: Path, cause: OSError) -> None:
+        self.error_type = type(cause).__name__
+        super().__init__(path, "操作系统未能读取文件")
 
 
 class ReadFileStartLineOutOfRangeError(ValueError):
     """非空文件的请求起始行超过实际最后一行。"""
 
+
+def read_file_bytes(path: Path) -> bytes:
+    """从已通过 Runtime 路径检查的目标中受控读取原始字节。"""
+
+    # 第一步：读取前若目标明确是目录，抛出目录领域错误。
+    if path.is_dir():
+        raise ReadFileTargetIsDirectoryError(
+            path,
+            "目标路径是目录，不能作为文件读取",
+        )
+
+    # 第二步：以二进制模式打开文件，最多读取字节上限再加 1 个字节。
+    try:
+        with path.open("rb") as file:
+            content = file.read(MAX_READ_BYTES + 1)
+    # 第三步：把读取时的文件不存在转换为 ReadFileNotFoundError。
+    except FileNotFoundError as exc:
+        raise ReadFileNotFoundError(
+            path,
+            "目标文件不存在",
+        ) from exc
+
+    # 第四步：若打开瞬间目标变成目录，把 IsADirectoryError 转换为目录错误。
+    except IsADirectoryError as exc:
+        raise ReadFileTargetIsDirectoryError(
+            path,
+            "目标路径是目录，不能作为文件读取",
+        ) from exc
+
+    # 第五步：把其余 OSError 转换为 ReadFileSystemError，并保留异常因果链。
+    except OSError as exc:
+        raise ReadFileSystemError(path, exc) from exc
+
+    # 第六步：若实际读到上限加 1，抛出 ReadFileTooLargeError。
+    if len(content) > MAX_READ_BYTES:
+        raise ReadFileTooLargeError(
+            path,
+            max_bytes=MAX_READ_BYTES,
+            observed_bytes=len(content),
+        )
+
+    # 第七步：只有完整内容未超过上限时，才返回原始 bytes。
+    return content
 
 def slice_verified_text_snapshot(
     *,

@@ -45,7 +45,8 @@ ForgeMind 是面向 Python / AI 应用开发者的项目级研发 Agent。V0.1 �
 ```text
 backend/forgemind/
 ├── schema/   # 跨越 Agent、Runtime、Tool、State 边界的数据契约
-├── runtime/  # Action 接受、权限处理和版本门禁
+├── runtime/  # Action 接受、权限、路径、版本和执行结果处理
+├── tools/    # 受控读取等具体操作
 └── state/    # Action、Observation 与权限记录的内存注册表
 tests/        # 与当前实现对应的行为测试
 docs/         # 01–16 正式设计文档和开发日志
@@ -57,12 +58,12 @@ docs/         # 01–16 正式设计文档和开发日志
 - Runtime action_id 分配、Action 注册和重复编号保护；
 - 权限检查三态、用户确认请求、用户决定及引用校验；
 - rejected / failed Observation 及不可覆盖的终态登记；
-- read_file 权限批准后的版本门禁、同一字节快照校验和按行分段结果。
+- read_file 的安全路径解析、受限字节读取、首次版本建立、已有版本校验、按行分段和三类终态登记。
 
-真实文件路径解析与打开、成功 Observation、持久化 State 及完整 Agent Loop 尚未实现。
+search_code、持久化 State 及完整 Agent Loop 尚未实现。
 
 ## 当前学习进度
 
-当前学习 `06-数据结构设计`（更新于 2026-09-18）。已完成 read_file 对同一字节快照的处理、结果与 Action 一致性检查及成功 Observation 登记；下一步实现项目根目录内的安全路径解析，再进入真实文件读取。详细设计演进见 `docs/06-数据结构设计.md`，逐步开发记录见 `docs/16-项目开发日志.md`。
+当前学习 `06-数据结构设计`（更新于 2026-09-23）。read_file V0.1 执行模块已完成并通过 122 项完整测试；下一步实现 search_code Tool，让 Agent 能先定位匹配位置，再按需读取文件。详细设计演进见 `docs/06-数据结构设计.md`，逐步开发记录见 `docs/16-项目开发日志.md`。
 
 每个切片只处理一个主要概念，并明确留出核心代码由用户先写；AI 提供脚手架、测试和基于真实错误的 Debug 支持。
