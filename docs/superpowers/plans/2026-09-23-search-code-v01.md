@@ -267,7 +267,7 @@ Run full: `F:\anaconda3\python.exe -m pytest -q -p no:cacheprovider --basetemp .
 - Consumes: `resolve_project_path(project_root: Path, requested_path: str) -> Path`。
 - Produces: `resolve_search_scope(project_root: Path, requested_scope: str) -> Path`、`UnsupportedSearchScopeError`。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```python
 def test_resolve_search_scope_accepts_project_python_file(tmp_path: Path) -> None:
@@ -289,13 +289,13 @@ def test_resolve_search_scope_rejects_non_python_file(tmp_path: Path) -> None:
 
 另写目录成功、`../outside` 和绝对路径用例；后两者断言既有 `UnsafeProjectPathError`。
 
-- [ ] **Step 2: 运行 RED 测试**
+- [x] **Step 2: 运行 RED 测试**
 
 Run: `F:\anaconda3\python.exe -m pytest -q -p no:cacheprovider --basetemp .test-tmp\search-scope tests\test_search_scope_resolution.py`
 
 Expected: FAIL，因为 `resolve_search_scope` 尚不存在。
 
-- [ ] **Step 3: 实现范围解析**
+- [x] **Step 3: 实现范围解析**
 
 ```python
 def resolve_search_scope(project_root: Path, requested_scope: str) -> Path:
@@ -307,13 +307,13 @@ def resolve_search_scope(project_root: Path, requested_scope: str) -> Path:
 
 不存在的 scope 不在本步骤伪装成路径逃逸，留给 Tool 形成明确执行失败。
 
-- [ ] **Step 4: 运行聚焦与完整测试**
+- [x] **Step 4: 运行聚焦与完整测试**
 
 Run focused: `F:\anaconda3\python.exe -m pytest -q -p no:cacheprovider --basetemp .test-tmp\search-scope tests\test_search_scope_resolution.py`
 
 Run full: `F:\anaconda3\python.exe -m pytest -q -p no:cacheprovider --basetemp .test-tmp\full-suite`
 
-- [ ] **Step 5: 提交检查点**
+- [x] **Step 5: 提交检查点**
 
 `git commit -m "feat: resolve safe search code scopes"`
 
