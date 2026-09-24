@@ -67,6 +67,6 @@ run_tests 执行器、run_command、持久化 State 及完整 Agent Loop 尚未�
 
 ## 当前学习进度
 
-当前学习 `06-数据结构设计`（更新于 2026-09-24）。read_file、search_code 与 edit_file V0.1 均已接入 Runtime/State；run_tests 已完成第一版参数与结果契约，下一步实现 Decision/AcceptedAction。当前完整测试 228 项通过。详细设计演进见 `docs/06-数据结构设计.md`，逐步开发记录见 `docs/16-项目开发日志.md`。
+当前学习 `06-数据结构设计`（更新于 2026-09-24）。read_file、search_code 与 edit_file V0.1 均已接入 Runtime/State；run_tests 已完成参数/结果契约及 Decision/AcceptedAction，下一步实现测试目标安全解析。当前完整测试 232 项通过。详细设计演进见 `docs/06-数据结构设计.md`，逐步开发记录见 `docs/16-项目开发日志.md`。
 
 每个切片只处理一个主要概念，并明确留出核心代码由用户先写；AI 提供脚手架、测试和基于真实错误的 Debug 支持。

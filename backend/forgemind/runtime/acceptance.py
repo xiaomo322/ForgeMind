@@ -4,11 +4,13 @@ from forgemind.runtime.ids import new_action_id
 from forgemind.schema.actions import (
     AcceptedEditFileToolAction,
     AcceptedReadFileToolAction,
+    AcceptedRunTestsToolAction,
     AcceptedSearchCodeToolAction,
 )
 from forgemind.schema.decisions import (
     EditFileToolCallDecision,
     ReadFileToolCallDecision,
+    RunTestsToolCallDecision,
     SearchCodeToolCallDecision,
 )
 from forgemind.state.action_registry import (
@@ -152,6 +154,7 @@ def accept_edit_file_decision(
         reason=decision.reason,
     )
 
+
 def accept_and_register_edit_file_decision(
     decision: EditFileToolCallDecision,
     *,
@@ -164,6 +167,53 @@ def accept_and_register_edit_file_decision(
 
     for _ in range(max_id_attempts):
         action = accept_edit_file_decision(
+            decision,
+            task_id=task_id,
+            next_action_id=next_action_id,
+        )
+        try:
+            registry.register(action)
+        except DuplicateActionIdError:
+            continue
+        return action
+
+    raise ActionIdAllocationError(max_id_attempts)
+
+
+def accept_run_tests_decision(
+    decision: RunTestsToolCallDecision,
+    *,
+    task_id: str,
+    next_action_id: ActionIdFactory = new_action_id,
+) -> AcceptedRunTestsToolAction:
+    """把已校验的 run_tests 决策转换为 Runtime 权威 Action。"""
+
+    # 第一步：调用 Runtime 编号工厂取得 action_id。
+    action_id = next_action_id()
+    # 第二步：构造 AcceptedRunTestsToolAction，加入 action_id 和 task_id。
+    # 第三步：原样保留不可变 arguments、路由标签和 reason 后返回。
+    return AcceptedRunTestsToolAction(
+        action_id=action_id,
+        task_id=task_id,
+        action_type=decision.action_type,
+        tool_name=decision.tool_name,
+        arguments=decision.arguments,
+        reason=decision.reason,
+    )
+
+
+def accept_and_register_run_tests_decision(
+    decision: RunTestsToolCallDecision,
+    *,
+    task_id: str,
+    registry: InMemoryActionRegistry,
+    next_action_id: ActionIdFactory = new_action_id,
+    max_id_attempts: int = 3,
+) -> AcceptedRunTestsToolAction:
+    """接受并注册 run_tests 决策；编号冲突时有限重试。"""
+
+    for _ in range(max_id_attempts):
+        action = accept_run_tests_decision(
             decision,
             task_id=task_id,
             next_action_id=next_action_id,

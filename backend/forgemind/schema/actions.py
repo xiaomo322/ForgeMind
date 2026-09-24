@@ -5,6 +5,7 @@ from pydantic import Field
 from forgemind.schema.base import StrictContractModel
 from forgemind.schema.edit_file import EditFileArguments
 from forgemind.schema.read_file import ReadFileArguments
+from forgemind.schema.run_tests import RunTestsArguments
 from forgemind.schema.search_code import SearchCodeArguments
 
 
@@ -46,8 +47,20 @@ class AcceptedEditFileToolAction(StrictContractModel):
     reason: str = Field(min_length=1)
 
 
+class AcceptedRunTestsToolAction(StrictContractModel):
+    """Runtime 接受 run_tests 决策后形成的权威执行记录。"""
+
+    action_id: str = Field(min_length=1)
+    task_id: str = Field(min_length=1)
+    action_type: Literal["tool_call"]
+    tool_name: Literal["run_tests"]
+    arguments: RunTestsArguments
+    reason: str = Field(min_length=1)
+
+
 AcceptedToolAction = (
     AcceptedReadFileToolAction
     | AcceptedSearchCodeToolAction
     | AcceptedEditFileToolAction
+    | AcceptedRunTestsToolAction
 )

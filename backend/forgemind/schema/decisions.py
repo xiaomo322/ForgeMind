@@ -5,6 +5,7 @@ from pydantic import Field
 from forgemind.schema.base import StrictContractModel
 from forgemind.schema.edit_file import EditFileArguments
 from forgemind.schema.read_file import ReadFileArguments
+from forgemind.schema.run_tests import RunTestsArguments
 from forgemind.schema.search_code import SearchCodeArguments
 
 
@@ -39,4 +40,13 @@ class EditFileToolCallDecision(StrictContractModel):
     action_type: Literal["tool_call"]
     tool_name: Literal["edit_file"]
     arguments: EditFileArguments
+    reason: str = Field(min_length=1)
+
+
+class RunTestsToolCallDecision(StrictContractModel):
+    """Agent 请求调用 run_tests 时必须产生的完整决策结构。"""
+
+    action_type: Literal["tool_call"]
+    tool_name: Literal["run_tests"]
+    arguments: RunTestsArguments
     reason: str = Field(min_length=1)
