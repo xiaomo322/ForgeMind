@@ -8,6 +8,8 @@ import tempfile
 from time import monotonic_ns
 from xml.etree import ElementTree
 
+from pydantic import ValidationError
+
 from forgemind.runtime.run_tests_targets import ResolvedTestTarget
 from forgemind.schema.run_tests import (
     RunTestsArguments,
@@ -94,9 +96,45 @@ class PytestReportUnavailableError(RunTestsToolError):
 class PytestReportTooLargeError(RunTestsToolError):
     """JUnit XML 超过 V0.1 允许解析的字节上限。"""
 
-    def __init__(self, *, max_bytes: int) -> None:
+    def __init__(
+        self,
+        *,
+        max_bytes: int,
+        exit_code: int,
+        duration_ms: int,
+        stdout: str,
+        stderr: str,
+        is_output_truncated: bool,
+    ) -> None:
         self.max_bytes = max_bytes
+        self.exit_code = exit_code
+        self.duration_ms = duration_ms
+        self.stdout = stdout
+        self.stderr = stderr
+        self.is_output_truncated = is_output_truncated
         super().__init__("pytest JUnit XML 报告超过字节上限")
+
+
+class PytestReportInvalidError(RunTestsToolError):
+    """pytest 已结束，但报告不能形成契约一致的结果。"""
+
+    def __init__(
+        self,
+        *,
+        cause: ValueError,
+        exit_code: int,
+        duration_ms: int,
+        stdout: str,
+        stderr: str,
+        is_output_truncated: bool,
+    ) -> None:
+        self.error_type = type(cause).__name__
+        self.exit_code = exit_code
+        self.duration_ms = duration_ms
+        self.stdout = stdout
+        self.stderr = stderr
+        self.is_output_truncated = is_output_truncated
+        super().__init__("pytest JUnit XML 报告无效")
 
 
 def _read_bounded_text(path: Path) -> tuple[str, bool]:
@@ -111,13 +149,28 @@ def _read_bounded_text(path: Path) -> tuple[str, bool]:
     )
 
 
-def _read_junit_xml(path: Path) -> bytes:
+def _read_junit_xml(
+    path: Path,
+    *,
+    exit_code: int,
+    duration_ms: int,
+    stdout: str,
+    stderr: str,
+    is_output_truncated: bool,
+) -> bytes:
     """只在完整报告未超过硬上限时返回 XML 字节。"""
 
     with path.open("rb") as stream:
         content = stream.read(MAX_JUNIT_XML_BYTES + 1)
     if len(content) > MAX_JUNIT_XML_BYTES:
-        raise PytestReportTooLargeError(max_bytes=MAX_JUNIT_XML_BYTES)
+        raise PytestReportTooLargeError(
+            max_bytes=MAX_JUNIT_XML_BYTES,
+            exit_code=exit_code,
+            duration_ms=duration_ms,
+            stdout=stdout,
+            stderr=stderr,
+            is_output_truncated=is_output_truncated,
+        )
     return content
 
 
@@ -346,17 +399,34 @@ def run_pytest(
 
         # 第七步：report.xml 不存在或不是普通文件时，携带真实进程事实抛出
         # PytestReportUnavailableError；存在时用 _read_junit_xml 受限读取。
-        junit_xml = _read_junit_xml(report_path)
-
-        # 第八步：调用 build_run_tests_result_from_junit，传入原 arguments、
-        # XML、真实 returncode、耗时、输出和截断标志，返回严格结果。
-
-        return build_run_tests_result_from_junit(
-            arguments,
-            junit_xml=junit_xml,
+        junit_xml = _read_junit_xml(
+            report_path,
             exit_code=completed_process.returncode,
             duration_ms=duration_ms,
             stdout=stdout,
             stderr=stderr,
             is_output_truncated=is_output_truncated,
         )
+
+        # 第八步：调用 build_run_tests_result_from_junit，传入原 arguments、
+        # XML、真实 returncode、耗时、输出和截断标志，返回严格结果。
+
+        try:
+            return build_run_tests_result_from_junit(
+                arguments,
+                junit_xml=junit_xml,
+                exit_code=completed_process.returncode,
+                duration_ms=duration_ms,
+                stdout=stdout,
+                stderr=stderr,
+                is_output_truncated=is_output_truncated,
+            )
+        except (InvalidPytestReportError, ValidationError) as exc:
+            raise PytestReportInvalidError(
+                cause=exc,
+                exit_code=completed_process.returncode,
+                duration_ms=duration_ms,
+                stdout=stdout,
+                stderr=stderr,
+                is_output_truncated=is_output_truncated,
+            ) from exc

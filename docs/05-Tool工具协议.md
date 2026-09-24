@@ -194,3 +194,5 @@ pytest 的结构化统计来自进程结束后生成的完整 JUnit XML，不从
 V0.1 使用当前 `sys.executable -m pytest` 和参数列表启动进程，固定关闭 Shell 解释。Runtime 已解析的安全绝对路径或 node id 作为独立参数传入；执行前必须再次核对这些目标对应原始 AcceptedAction 参数。每次执行使用独立临时目录保存 JUnit XML、stdout、stderr 和 pytest 临时文件，返回输出最多各 64 KiB，报告最大 4 MiB。
 
 无法启动、超时、没有报告或报告超过上限时不构造 RunTestsResult。超时和报告缺失错误仍保留已知耗时、退出码及有限输出。V0.1 目前限制的是返回给 Agent 的输出大小；子进程写入临时日志的磁盘总量、继承环境变量及测试再派生的子进程清理仍需在后续安全加固中处理。
+
+Runtime 先解析全部目标：路径逃逸或 node id 格式错误发生在 Tool 调用前，登记 rejected。pytest 无法启动、超时、报告缺失、超限或无效发生在 Tool 阶段，登记 failed。取得可信报告后登记 success；其中 result.test_outcome 仍可为 failed，表示 Tool 成功获得“测试用例失败”的证据。成功结果和各类失败证据都以同一个 action_id 写入唯一终态 Observation。

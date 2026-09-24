@@ -6,6 +6,7 @@ from pydantic import Field
 from forgemind.schema.base import StrictContractModel
 from forgemind.schema.edit_file import EditFileResult
 from forgemind.schema.read_file import ReadFileResult
+from forgemind.schema.run_tests import RunTestsResult
 from forgemind.schema.search_code import SearchCodeResult
 
 
@@ -28,6 +29,12 @@ class ObservationErrorCode(StrEnum):
     EDIT_TARGET_NOT_FOUND = "EDIT_TARGET_NOT_FOUND"
     EDIT_TARGET_AMBIGUOUS = "EDIT_TARGET_AMBIGUOUS"
     FILE_WRITE_FAILED = "FILE_WRITE_FAILED"
+    INVALID_TEST_TARGET = "INVALID_TEST_TARGET"
+    TEST_RUNNER_START_FAILED = "TEST_RUNNER_START_FAILED"
+    TEST_RUNNER_TIMEOUT = "TEST_RUNNER_TIMEOUT"
+    TEST_REPORT_UNAVAILABLE = "TEST_REPORT_UNAVAILABLE"
+    TEST_REPORT_TOO_LARGE = "TEST_REPORT_TOO_LARGE"
+    TEST_REPORT_INVALID = "TEST_REPORT_INVALID"
 
 
 class ObservationErrorDetail(StrictContractModel):
@@ -87,10 +94,19 @@ class EditFileSuccessObservation(StrictContractModel):
     result: EditFileResult
 
 
+class RunTestsSuccessObservation(StrictContractModel):
+    """run_tests 已取得可信测试报告后形成的事实记录。"""
+
+    action_id: str = Field(min_length=1)
+    status: Literal["success"]
+    result: RunTestsResult
+
+
 TerminalObservation = (
     RejectedObservation
     | FailedObservation
     | ReadFileSuccessObservation
     | SearchCodeSuccessObservation
     | EditFileSuccessObservation
+    | RunTestsSuccessObservation
 )
