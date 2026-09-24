@@ -196,3 +196,5 @@ V0.1 使用当前 `sys.executable -m pytest` 和参数列表启动进程，固�
 无法启动、超时、没有报告或报告超过上限时不构造 RunTestsResult。超时和报告缺失错误仍保留已知耗时、退出码及有限输出。V0.1 目前限制的是返回给 Agent 的输出大小；子进程写入临时日志的磁盘总量、继承环境变量及测试再派生的子进程清理仍需在后续安全加固中处理。
 
 Runtime 先解析全部目标：路径逃逸或 node id 格式错误发生在 Tool 调用前，登记 rejected。pytest 无法启动、超时、报告缺失、超限或无效发生在 Tool 阶段，登记 failed。取得可信报告后登记 success；其中 result.test_outcome 仍可为 failed，表示 Tool 成功获得“测试用例失败”的证据。成功结果和各类失败证据都以同一个 action_id 写入唯一终态 Observation。
+
+run_tests 会执行项目代码，因此 AcceptedAction 进入 Tool 前需经过权限检查。需要确认时，PendingRunTestsPermissionRequest 保存 action_id、完整 targets、timeout、原因和策略依据；用户决定只按已登记 permission_decision_id 恢复 State 中的原 Action。拒绝形成 PERMISSION_DENIED 的 rejected Observation，批准后仍需继续路径和执行检查。V0.1 的授权绑定操作范围，但尚未绑定整个项目的内容快照，批准后代码变化风险留待项目快照机制处理。

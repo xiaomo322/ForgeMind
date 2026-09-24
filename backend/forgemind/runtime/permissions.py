@@ -5,6 +5,7 @@ from collections.abc import Callable
 from forgemind.schema.actions import (
     AcceptedEditFileToolAction,
     AcceptedReadFileToolAction,
+    AcceptedRunTestsToolAction,
     AcceptedToolAction,
 )
 from forgemind.schema.observations import (
@@ -16,6 +17,7 @@ from forgemind.schema.observations import (
 from forgemind.schema.permissions import (
     PendingEditFilePermissionRequest,
     PendingReadFilePermissionRequest,
+    PendingRunTestsPermissionRequest,
     PermissionCheckOutcome,
     PermissionCheckResult,
     PermissionDecision,
@@ -122,6 +124,44 @@ def create_and_register_pending_edit_file_permission_request(
         basis_ids=permission_check.basis_ids,
     )
     # 第四步：先登记到 State，再返回同一个 pending 对象。
+    requests.register(pending)
+    return pending
+
+
+def create_and_register_pending_run_tests_permission_request(
+    action: AcceptedRunTestsToolAction,
+    permission_check: PermissionCheckResult,
+    *,
+    requests: InMemoryPermissionRequestRegistry,
+    next_permission_request_id: PermissionRequestIdFactory,
+) -> PendingRunTestsPermissionRequest:
+    """把 run_tests 确认结论转换为已登记的用户询问。"""
+
+    if permission_check.action_id != action.action_id:
+        raise PermissionCheckActionMismatchError(
+            "权限检查结果与当前 run_tests Action 不一致"
+        )
+
+    if (
+            permission_check.outcome
+            is not PermissionCheckOutcome.CONFIRMATION_REQUIRED
+    ):
+        raise PermissionOutcomeNotConfirmationRequiredError(
+            "只有 confirmation_required 能创建待确认权限请求"
+        )
+
+    pending = PendingRunTestsPermissionRequest(
+        permission_request_id=next_permission_request_id(),
+        task_id=action.task_id,
+        action_id=action.action_id,
+        status="pending",
+        action_type=action.action_type,
+        tool_name=action.tool_name,
+        arguments=action.arguments,
+        reason=permission_check.reason,
+        basis_ids=permission_check.basis_ids,
+    )
+
     requests.register(pending)
     return pending
 
