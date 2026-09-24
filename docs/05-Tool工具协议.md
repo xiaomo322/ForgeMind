@@ -190,3 +190,7 @@ pytest 正常完成并产生可信 JUnit XML 后返回 RunTestsResult。结果�
 test_outcome 使用 passed、failed、error、no_tests。它描述测试业务结果，与 Observation 顶层执行状态分开；测试用例失败仍可形成 Tool success。结果同时核对 pytest 8.3 退出码：passed=0、failed=1、no_tests=5，error 接受 1～4。进程未启动、超时或报告不完整时不构造 RunTestsResult。
 
 pytest 的结构化统计来自进程结束后生成的完整 JUnit XML，不从 stdout 文本猜测。解析器兼容单个 `testsuite` 和 `testsuites` 下的多个直接子套件，汇总 tests、failures、errors、skipped，并计算 passed。XML 格式错误、必要属性缺失、负数或统计互相矛盾时，报告不具备权威性，Tool 必须失败而不能生成看似可信的测试结果。
+
+V0.1 使用当前 `sys.executable -m pytest` 和参数列表启动进程，固定关闭 Shell 解释。Runtime 已解析的安全绝对路径或 node id 作为独立参数传入；执行前必须再次核对这些目标对应原始 AcceptedAction 参数。每次执行使用独立临时目录保存 JUnit XML、stdout、stderr 和 pytest 临时文件，返回输出最多各 64 KiB，报告最大 4 MiB。
+
+无法启动、超时、没有报告或报告超过上限时不构造 RunTestsResult。超时和报告缺失错误仍保留已知耗时、退出码及有限输出。V0.1 目前限制的是返回给 Agent 的输出大小；子进程写入临时日志的磁盘总量、继承环境变量及测试再派生的子进程清理仍需在后续安全加固中处理。
