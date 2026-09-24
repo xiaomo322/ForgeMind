@@ -4,6 +4,7 @@ from typing import Literal
 from pydantic import Field
 
 from forgemind.schema.base import StrictContractModel
+from forgemind.schema.edit_file import EditFileResult
 from forgemind.schema.read_file import ReadFileResult
 from forgemind.schema.search_code import SearchCodeResult
 
@@ -23,6 +24,10 @@ class ObservationErrorCode(StrEnum):
     UNSUPPORTED_SEARCH_SCOPE = "UNSUPPORTED_SEARCH_SCOPE"
     SEARCH_SCOPE_NOT_FOUND = "SEARCH_SCOPE_NOT_FOUND"
     SEARCH_FAILED = "SEARCH_FAILED"
+    NO_CHANGE_REQUEST = "NO_CHANGE_REQUEST"
+    EDIT_TARGET_NOT_FOUND = "EDIT_TARGET_NOT_FOUND"
+    EDIT_TARGET_AMBIGUOUS = "EDIT_TARGET_AMBIGUOUS"
+    FILE_WRITE_FAILED = "FILE_WRITE_FAILED"
 
 
 class ObservationErrorDetail(StrictContractModel):
@@ -74,9 +79,18 @@ class SearchCodeSuccessObservation(StrictContractModel):
     result: SearchCodeResult
 
 
+class EditFileSuccessObservation(StrictContractModel):
+    """edit_file 成功写回真实文件后形成的事实记录。"""
+
+    action_id: str = Field(min_length=1)
+    status: Literal["success"]
+    result: EditFileResult
+
+
 TerminalObservation = (
     RejectedObservation
     | FailedObservation
     | ReadFileSuccessObservation
     | SearchCodeSuccessObservation
+    | EditFileSuccessObservation
 )
