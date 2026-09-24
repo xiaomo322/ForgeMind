@@ -168,3 +168,15 @@ run_command 的核心概念教学已覆盖程序与参数分离、工作目录�
 MVP 五个工具的核心职责与主要边界已经逐项讲解：read_file、search_code、edit_file、run_tests、run_command。已确认共同原则：明确输入、实际结果、错误可区分、所有调用经过 Runtime、工具不做业务决策。
 
 本章仍保留默认值、枚举、资源限制、平台机制和完整 Schema 等细节，后续结合 06 数据结构统一收束。下一课程进入 Action / Observation 的正式结构设计，先从为什么需要共同外层结构开始；尚未开始代码实现。
+
+## 17. edit_file V0.1 最终协议（2026-09-24）
+
+`edit_file` 只修改项目根目录内已经存在、最大 64 KiB 的 UTF-8 文本文件。输入固定为非空 `path`、非空 `old_text`、必填但可为空的 `new_text`，以及基于完整原始字节计算的必填 `expected_version`。V0.1 不创建文件，不支持正则、模糊匹配、全部替换或多文件事务。
+
+每个 AcceptedEditFileToolAction 都需要独立权限请求。待确认请求保存完整参数快照，用户决定通过 permission_request_id、task_id 和 action_id 关联；批准后 Runtime 从 State 取回原始不可变 Action，不能根据回答重新生成或扩大修改范围。
+
+执行时先检查项目路径和无变化请求。路径逃逸或 `old_text == new_text` 在 Tool 调用前登记 rejected。Tool 读取真实字节后校验版本、UTF-8 编码和精确匹配数；0 次、多次匹配或版本变化均登记 failed，且不写入目标文件。
+
+唯一匹配时，Tool 根据同一快照生成新字节、前后 SHA-256 版本和 unified diff。写回使用目标同目录临时文件，完整写入后执行 flush、fsync、复制权限并再次核对目标版本，最后调用 `os.replace` 切换。替换前失败会清理本次临时文件并保留目标文件。
+
+成功结果包含 path、before_version、after_version、固定为 1 的 replacement_count 和真实 diff。只有原子替换完成后才能登记 success。该实现不承诺断电后的目录项持久性、多进程完全无竞争或多文件事务。

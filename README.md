@@ -19,8 +19,8 @@ ForgeMind 是面向 Python / AI 应用开发者的项目级研发 Agent。V0.1 �
 | 02 | 产品设计 | 初步确定 |
 | 03 | 系统总体架构 | 核心调用路径已确认 |
 | 04 | Agent 架构设计 | 核心已确定 |
-| 05 | Tool 工具协议 | 初步确定 |
-| 06 | 数据结构设计 | 实现中：Action、权限、Observation 与版本门禁 |
+| 05 | Tool 工具协议 | read/search/edit 已实现 |
+| 06 | 数据结构设计 | read/search/edit 闭环已实现 |
 | 07 | RAG 设计 | MVP 后 |
 | 08 | Memory 设计 | MVP 后 |
 | 09 | Multi-Agent 设计 | MVP 后 |
@@ -46,7 +46,7 @@ ForgeMind 是面向 Python / AI 应用开发者的项目级研发 Agent。V0.1 �
 backend/forgemind/
 ├── schema/   # 跨越 Agent、Runtime、Tool、State 边界的数据契约
 ├── runtime/  # Action 接受、权限、路径、版本和执行结果处理
-├── tools/    # 受控读取等具体操作
+├── tools/    # 受控读取、源码搜索和原子文件修改
 └── state/    # Action、Observation 与权限记录的内存注册表
 tests/        # 与当前实现对应的行为测试
 docs/         # 01–16 正式设计文档和开发日志
@@ -60,11 +60,12 @@ docs/         # 01–16 正式设计文档和开发日志
 - rejected / failed Observation 及不可覆盖的终态登记；
 - read_file 的安全路径解析、受限字节读取、首次版本建立、已有版本校验、按行分段和三类终态登记。
 - search_code 的严格契约、Action 登记、安全范围解析、受限文本搜索和 success/rejected/failed 终态登记。
+- edit_file 的版本绑定、逐 Action 用户确认、唯一精确替换、真实 diff、同目录临时文件和原子替换闭环。
 
-edit_file、run_tests、持久化 State 及完整 Agent Loop 尚未实现。
+run_tests、run_command、持久化 State 及完整 Agent Loop 尚未实现。
 
 ## 当前学习进度
 
-当前学习 `06-数据结构设计`（更新于 2026-09-23）。read_file V0.1 与 search_code V0.1 均已完成并接入 Runtime/State；下一步进入 edit_file 的版本绑定修改闭环。当前完整测试 164 项通过。详细设计演进见 `docs/06-数据结构设计.md`，逐步开发记录见 `docs/16-项目开发日志.md`。
+当前学习 `06-数据结构设计`（更新于 2026-09-24）。read_file、search_code 与 edit_file V0.1 均已接入 Runtime/State；下一步进入 run_tests 的结构化执行证据闭环。当前 edit_file 专项测试 46 项、完整测试 210 项通过。详细设计演进见 `docs/06-数据结构设计.md`，逐步开发记录见 `docs/16-项目开发日志.md`。
 
 每个切片只处理一个主要概念，并明确留出核心代码由用户先写；AI 提供脚手架、测试和基于真实错误的 Debug 支持。
