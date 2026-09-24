@@ -3,6 +3,7 @@ from typing import Literal
 from pydantic import Field
 
 from forgemind.schema.base import StrictContractModel
+from forgemind.schema.edit_file import EditFileArguments
 from forgemind.schema.read_file import ReadFileArguments
 from forgemind.schema.search_code import SearchCodeArguments
 
@@ -34,4 +35,19 @@ class AcceptedSearchCodeToolAction(StrictContractModel):
     reason: str = Field(min_length=1)
 
 
-AcceptedToolAction = AcceptedReadFileToolAction | AcceptedSearchCodeToolAction
+class AcceptedEditFileToolAction(StrictContractModel):
+    """Runtime 接受 edit_file 决策后形成的权威执行记录。"""
+
+    action_id: str = Field(min_length=1)
+    task_id: str = Field(min_length=1)
+    action_type: Literal["tool_call"]
+    tool_name: Literal["edit_file"]
+    arguments: EditFileArguments
+    reason: str = Field(min_length=1)
+
+
+AcceptedToolAction = (
+    AcceptedReadFileToolAction
+    | AcceptedSearchCodeToolAction
+    | AcceptedEditFileToolAction
+)

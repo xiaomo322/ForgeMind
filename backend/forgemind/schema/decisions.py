@@ -3,6 +3,7 @@ from typing import Literal
 from pydantic import Field
 
 from forgemind.schema.base import StrictContractModel
+from forgemind.schema.edit_file import EditFileArguments
 from forgemind.schema.read_file import ReadFileArguments
 from forgemind.schema.search_code import SearchCodeArguments
 
@@ -29,4 +30,13 @@ class SearchCodeToolCallDecision(StrictContractModel):
     action_type: Literal["tool_call"]
     tool_name: Literal["search_code"]
     arguments: SearchCodeArguments
+    reason: str = Field(min_length=1)
+
+
+class EditFileToolCallDecision(StrictContractModel):
+    """Agent 请求调用 edit_file 时必须产生的完整决策结构。"""
+
+    action_type: Literal["tool_call"]
+    tool_name: Literal["edit_file"]
+    arguments: EditFileArguments
     reason: str = Field(min_length=1)
