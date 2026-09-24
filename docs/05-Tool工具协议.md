@@ -180,3 +180,11 @@ MVP 五个工具的核心职责与主要边界已经逐项讲解：read_file、s
 唯一匹配时，Tool 根据同一快照生成新字节、前后 SHA-256 版本和 unified diff。写回使用目标同目录临时文件，完整写入后执行 flush、fsync、复制权限并再次核对目标版本，最后调用 `os.replace` 切换。替换前失败会清理本次临时文件并保留目标文件。
 
 成功结果包含 path、before_version、after_version、固定为 1 的 replacement_count 和真实 diff。只有原子替换完成后才能登记 success。该实现不承诺断电后的目录项持久性、多进程完全无竞争或多文件事务。
+
+## 18. run_tests V0.1 参数与结果契约（2026-09-24）
+
+`targets` 是必填非空 tuple，全量测试也必须显式提供例如 `("tests",)`；以 `-` 开头的值会被拒绝，防止目标字段被解释为额外 pytest 选项。`timeout_seconds` 默认 120，允许范围 1～900 秒。
+
+pytest 正常完成并产生可信 JUnit XML 后返回 RunTestsResult。结果保存 runner、原 targets、test_outcome、收集/通过/失败/错误/跳过数量、退出码、耗时、标准输出/错误及输出截断标志。四种分类数量之和必须等于 collected。
+
+test_outcome 使用 passed、failed、error、no_tests。它描述测试业务结果，与 Observation 顶层执行状态分开；测试用例失败仍可形成 Tool success。结果同时核对 pytest 8.3 退出码：passed=0、failed=1、no_tests=5，error 接受 1～4。进程未启动、超时或报告不完整时不构造 RunTestsResult。
