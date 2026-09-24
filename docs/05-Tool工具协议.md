@@ -188,3 +188,5 @@ MVP 五个工具的核心职责与主要边界已经逐项讲解：read_file、s
 pytest 正常完成并产生可信 JUnit XML 后返回 RunTestsResult。结果保存 runner、原 targets、test_outcome、收集/通过/失败/错误/跳过数量、退出码、耗时、标准输出/错误及输出截断标志。四种分类数量之和必须等于 collected。
 
 test_outcome 使用 passed、failed、error、no_tests。它描述测试业务结果，与 Observation 顶层执行状态分开；测试用例失败仍可形成 Tool success。结果同时核对 pytest 8.3 退出码：passed=0、failed=1、no_tests=5，error 接受 1～4。进程未启动、超时或报告不完整时不构造 RunTestsResult。
+
+pytest 的结构化统计来自进程结束后生成的完整 JUnit XML，不从 stdout 文本猜测。解析器兼容单个 `testsuite` 和 `testsuites` 下的多个直接子套件，汇总 tests、failures、errors、skipped，并计算 passed。XML 格式错误、必要属性缺失、负数或统计互相矛盾时，报告不具备权威性，Tool 必须失败而不能生成看似可信的测试结果。

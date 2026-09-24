@@ -61,12 +61,12 @@ docs/         # 01–16 正式设计文档和开发日志
 - read_file 的安全路径解析、受限字节读取、首次版本建立、已有版本校验、按行分段和三类终态登记。
 - search_code 的严格契约、Action 登记、安全范围解析、受限文本搜索和 success/rejected/failed 终态登记。
 - edit_file 的版本绑定、逐 Action 用户确认、唯一精确替换、真实 diff、同目录临时文件和原子替换闭环。
-- run_tests 的显式目标、受控超时和结构化测试结果严格契约。
+- run_tests 的显式目标、受控超时、结构化结果契约、安全目标解析和 JUnit XML 权威统计解析。
 
-run_tests 执行器、run_command、持久化 State 及完整 Agent Loop 尚未实现。
+run_tests 受控子进程执行器、run_command、持久化 State 及完整 Agent Loop 尚未实现。
 
 ## 当前学习进度
 
-当前学习 `06-数据结构设计`（更新于 2026-09-24）。read_file、search_code 与 edit_file V0.1 均已接入 Runtime/State；run_tests 已完成参数/结果契约、Decision/AcceptedAction 和测试目标安全解析，下一步实现 pytest/JUnit XML Tool。当前完整测试 240 项通过。详细设计演进见 `docs/06-数据结构设计.md`，逐步开发记录见 `docs/16-项目开发日志.md`。
+当前学习 `06-数据结构设计`（更新于 2026-09-24）。read_file、search_code 与 edit_file V0.1 均已接入 Runtime/State；run_tests 已完成参数/结果契约、Decision/AcceptedAction、测试目标安全解析和 JUnit XML 权威统计解析，下一步实现受控 pytest 子进程。当前完整测试 251 项通过。详细设计演进见 `docs/06-数据结构设计.md`，逐步开发记录见 `docs/16-项目开发日志.md`。
 
 每个切片只处理一个主要概念，并明确留出核心代码由用户先写；AI 提供脚手架、测试和基于真实错误的 Debug 支持。
