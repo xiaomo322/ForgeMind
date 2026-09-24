@@ -1,6 +1,6 @@
 """等待用户确认的权限请求注册表。"""
 
-from forgemind.schema.permissions import PendingReadFilePermissionRequest
+from forgemind.schema.permissions import PendingPermissionRequest
 from forgemind.state.action_registry import InMemoryActionRegistry
 
 
@@ -21,9 +21,9 @@ class InMemoryPermissionRequestRegistry:
 
     def __init__(self, actions: InMemoryActionRegistry) -> None:
         self._actions = actions
-        self._requests: dict[str, PendingReadFilePermissionRequest] = {}
+        self._requests: dict[str, PendingPermissionRequest] = {}
 
-    def register(self, request: PendingReadFilePermissionRequest) -> None:
+    def register(self, request: PendingPermissionRequest) -> None:
         """登记请求；未知 Action、快照变化或重复编号都明确失败。"""
 
         try:
@@ -48,7 +48,7 @@ class InMemoryPermissionRequestRegistry:
 
         self._requests[request.permission_request_id] = request
 
-    def get(self, permission_request_id: str) -> PendingReadFilePermissionRequest:
+    def get(self, permission_request_id: str) -> PendingPermissionRequest:
         """按询问编号取得待确认请求。"""
 
         return self._requests[permission_request_id]
