@@ -5,6 +5,7 @@ from pydantic import Field
 from forgemind.schema.base import StrictContractModel
 from forgemind.schema.edit_file import EditFileArguments
 from forgemind.schema.read_file import ReadFileArguments
+from forgemind.schema.run_command import RunCommandArguments
 from forgemind.schema.run_tests import RunTestsArguments
 from forgemind.schema.search_code import SearchCodeArguments
 
@@ -49,4 +50,13 @@ class RunTestsToolCallDecision(StrictContractModel):
     action_type: Literal["tool_call"]
     tool_name: Literal["run_tests"]
     arguments: RunTestsArguments
+    reason: str = Field(min_length=1)
+
+
+class RunCommandToolCallDecision(StrictContractModel):
+    """Agent 请求调用 run_command 时必须产生的完整决策结构。"""
+
+    action_type: Literal["tool_call"]
+    tool_name: Literal["run_command"]
+    arguments: RunCommandArguments
     reason: str = Field(min_length=1)

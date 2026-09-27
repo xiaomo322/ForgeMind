@@ -203,6 +203,8 @@ run_tests 会执行项目代码，因此 AcceptedAction 进入 Tool 前需经过
 
 Agent 只提交 program 逻辑别名、独立 args tuple、显式项目相对 working_directory 和 1～900 秒 timeout。program 别名只能包含字母、数字、点、下划线和连字符，不能携带路径、空格或 Shell 语法；args 可以包含空格、空字符串或选项，因为每项保持独立参数边界且后续固定不经过 Shell。
 
+Agent 的 RunCommandToolCallDecision 不含 action_id。Runtime 接受决策时分配 action_id、附加 task_id，并把原有不可变 arguments 对象保存进 AcceptedRunCommandToolAction。注册表按 action_id 拒绝覆盖；碰撞时 Runtime 只能重新分配编号，不能删除或改写旧 Action。下一阶段对这个已登记的具体 Action 请求用户授权。
+
 Runtime 允许列表把 program 别名映射到确定的绝对可执行文件路径。别名未允许时拒绝 Action；策略提供相对程序路径属于 Runtime 配置错误。工作目录复用项目路径边界解析，但本阶段不声称程序或目录已经存在，真实存在性留给 Tool 执行报告。
 
 进程正常启动并在超时前结束后，RunCommandResult 保存原程序别名、真实 executable、原 args、原 working_directory、退出码、耗时、stdout/stderr 和截断事实。非零退出码仍是已完成进程的真实结果，不自动等同于 Tool 调用失败或整个任务失败。
