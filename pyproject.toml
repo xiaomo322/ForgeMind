@@ -15,8 +15,8 @@ dev = [
 pythonpath = ["backend"]
 testpaths = ["tests"]
 # Windows 上部分 Python/IDE 无权访问用户级 pytest 临时目录。
-# 统一使用已被 Git 忽略的项目内目录，也让 tmp_path 行为在 IDE 和命令行一致。
-addopts = "--basetemp=.test-tmp/pytest"
+# IDE 使用独立目录，避免与 Codex 沙箱创建的受限临时目录争用 ACL。
+addopts = "--basetemp=.test-tmp/pytest-user"
 
 [tool.setuptools.packages.find]
 where = ["backend"]
