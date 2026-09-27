@@ -33,10 +33,12 @@ class RunCommandArguments(StrictContractModel):
         """program 只能是交给 Runtime 允许列表解析的逻辑别名。"""
 
         # 第一步：使用 PROGRAM_ALIAS_PATTERN.fullmatch 检查完整字符串。
-        # 第二步：不匹配时抛出 ValueError；路径分隔符、盘符、空格和
-        # Shell 元字符都不能成为 program alias 的一部分。
         if PROGRAM_ALIAS_PATTERN.fullmatch(program) is None:
-            raise ValueError("program 必须是安全的程序别名")
+            # 第二步：不匹配时抛出 ValueError；路径分隔符、盘符、空格和
+            # Shell 元字符都不能成为 program alias 的一部分。
+            raise ValueError(
+                "program 必须是 Runtime 允许列表中的逻辑别名"
+            )
 
         # 第三步：匹配成功时原样返回 program。
         return program
