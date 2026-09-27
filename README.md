@@ -47,7 +47,7 @@ backend/forgemind/
 ├── schema/   # 跨越 Agent、Runtime、Tool、State 边界的数据契约
 ├── runtime/  # Action 接受、权限、路径、版本和执行结果处理
 ├── tools/    # 受控读取、源码搜索和原子文件修改
-└── state/    # Action、Observation 与权限记录的内存注册表
+└── state/    # Action、Observation 与权限记录的内存及 SQLite 注册表
 tests/        # 与当前实现对应的行为测试
 docs/         # 01–16 正式设计文档和开发日志
 ```
@@ -63,11 +63,12 @@ docs/         # 01–16 正式设计文档和开发日志
 - edit_file 的版本绑定、逐 Action 用户确认、唯一精确替换、真实 diff、同目录临时文件和原子替换闭环。
 - run_tests 的显式目标、逐 Action 权限、安全解析、真实 pytest、JUnit XML 及 Runtime/Observation 闭环。
 - run_command V0.1 的严格契约、程序策略、Action 登记、逐 Action 授权、真实进程执行和完整证据链。
+- SQLite 持久化 Action、权限请求、用户决定和 Observation，并已验证跨三次重启恢复完整执行链。
 
-SQLite 完整重启流程验证、统一任务 State 及完整 Agent Loop 尚未实现。
+统一任务 State 及完整 Agent Loop 尚未实现。
 
 ## 当前学习进度
 
-当前学习 `06-数据结构设计`（更新于 2026-09-27）。五个 Tool V0.1 均已形成完整证据链；SQLite 已完成 AcceptedAction、权限请求、用户决定和 Observation 的事务写入、唯一/引用约束、重启恢复和严格反序列化。下一步编写完整重启恢复流程测试。当前完整测试 343 项通过。详细设计演进见 `docs/06-数据结构设计.md`，逐步开发记录见 `docs/16-项目开发日志.md`。
+当前学习 `06-数据结构设计`（更新于 2026-09-27）。五个 Tool V0.1 均已形成完整证据链；SQLite 已完成四类权威事实的事务写入、唯一/引用约束、严格反序列化，并通过等待、批准、执行与结果跨三次重启的完整流程测试。下一步建立统一的任务级 `ForgeMindState` 入口。当前完整测试 344 项通过。详细设计演进见 `docs/06-数据结构设计.md`，逐步开发记录见 `docs/16-项目开发日志.md`。
 
 每个切片只处理一个主要概念，并明确留出核心代码由用户先写；AI 提供脚手架、测试和基于真实错误的 Debug 支持。

@@ -1,7 +1,7 @@
 # ForgeMind 上下文与 Memory 设计
 
 **版本：V0.1**  
-**状态：任务事实存储已部分实现；SQLite 持久化正在实现**
+**状态：四类任务事实已完成 SQLite 持久化与完整重启验证**
 
 ## 1. MVP 决定
 
@@ -21,7 +21,7 @@ State 和本轮模型上下文不能混为一体。上下文可以裁剪或摘�
 
 ## 2. 当前已经实现的事实存储
 
-当前使用单进程内存 Registry：
+当前同时提供单进程内存 Registry 和 SQLite Registry：
 
 | Registry | 保存内容 |
 |---|---|
@@ -29,6 +29,8 @@ State 和本轮模型上下文不能混为一体。上下文可以裁剪或摘�
 | `InMemoryObservationRegistry` | 每个 Action 唯一的 success、rejected 或 failed 终态 |
 | `InMemoryPermissionRequestRegistry` | 向用户展示的具体权限询问和操作快照 |
 | `InMemoryPermissionDecisionRegistry` | 用户针对某条询问作出的最终决定 |
+
+四个对应的 SQLite Registry 保存相同事实，并使用同一个数据库建立主键、唯一键和外键约束。完整流程已经验证：程序可以在等待用户、用户批准和命令执行之间多次重启，随后仍从数据库恢复同一条权威证据链。
 
 Action、Observation 和权限记录通过 `task_id`、`action_id`、`permission_request_id` 与 `permission_decision_id` 建立明确关联。Registry 采用追加式规则，已有事实不能被同编号的新对象覆盖。
 
@@ -84,13 +86,12 @@ ForgeMindState
 
 ## 7. 当前限制与后续顺序
 
-原 Registry 只存在于进程内，程序退出后记录会丢失。当前已通过 ADR-0001 选择 SQLite，并先完成 AcceptedAction 持久化；后续按以下顺序补齐：
+原有内存 Registry 在程序退出后会丢失。ADR-0001 选择的 SQLite 实现现已完成四类事实持久化和完整重启测试；后续按以下顺序推进：
 
-1. 用完整重启流程验证四类 SQLite Registry；
-2. 定义任务级 `ForgeMindState`；
-3. 实现 Context Builder 和每轮输入预算；
-4. 实现统一 Agent Loop；
-5. 跑通真实 Bug 修复案例。
+1. 定义任务级 `ForgeMindState`；
+2. 实现 Context Builder 和每轮输入预算；
+3. 实现统一 Agent Loop；
+4. 跑通真实 Bug 修复案例。
 
 SQLite Registry 从 JSON 重建严格模型，因此重启后保证值和类型一致，不承诺 Python 对象身份一致。数据库主键和事务负责磁盘层防覆盖，Pydantic 负责读取时的结构校验。
 
