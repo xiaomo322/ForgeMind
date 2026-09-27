@@ -1,7 +1,7 @@
 # ForgeMind 上下文与 Memory 设计
 
 **版本：V0.1**  
-**状态：任务事实存储已部分实现；Context Builder 与持久化待实现**
+**状态：任务事实存储已部分实现；SQLite 持久化正在实现**
 
 ## 1. MVP 决定
 
@@ -84,13 +84,14 @@ ForgeMindState
 
 ## 7. 当前限制与后续顺序
 
-当前 Registry 只存在于进程内，程序退出后记录会丢失。MVP 后续按以下顺序补齐：
+原 Registry 只存在于进程内，程序退出后记录会丢失。当前已通过 ADR-0001 选择 SQLite，并先完成 AcceptedAction 持久化；后续按以下顺序补齐：
 
-1. 完成 `run_command` 证据链；
+1. 持久化权限请求、用户决定与 Observation；
 2. 定义任务级 `ForgeMindState`；
 3. 实现 Context Builder 和每轮输入预算；
 4. 实现统一 Agent Loop；
-5. 跑通真实 Bug 修复案例；
-6. 再评估 JSON、SQLite 或其他持久化方案。
+5. 跑通真实 Bug 修复案例。
+
+SQLite Registry 从 JSON 重建严格模型，因此重启后保证值和类型一致，不承诺 Python 对象身份一致。数据库主键和事务负责磁盘层防覆盖，Pydantic 负责读取时的结构校验。
 
 长期项目记忆、用户偏好、跨任务经验和 RAG 均不属于当前 MVP。
