@@ -19,6 +19,7 @@ from forgemind.schema.permissions import (
     PermissionDecisionRecord,
 )
 from forgemind.schema.run_command import RunCommandArguments
+from forgemind.schema.tasks import TaskRecord
 from forgemind.state.sqlite_state import SQLiteForgeMindState
 
 
@@ -30,6 +31,12 @@ def test_sqlite_state_survives_wait_approve_execute_restarts(
     # 第一步：确定 state.db 路径，并模拟第一次启动创建四个 Registry。
     database_path = tmp_path / "state.db"
     state_1 = SQLiteForgeMindState.open(database_path)
+    task = TaskRecord(
+        task_id="task-persistent-001",
+        original_request="运行命令并验证 SQLite State 跨重启恢复",
+        project_root=str(tmp_path.resolve()),
+    )
+    state_1.tasks.register(task)
     # 第二步：创建 run_command Decision，执行当前 Python 输出固定标记。
     decision = RunCommandToolCallDecision(
         action_type="tool_call",
@@ -135,6 +142,7 @@ def test_sqlite_state_survives_wait_approve_execute_restarts(
     )
 
     assert state_4.actions.get(action.action_id) == action
+    assert state_4.tasks.get(task.task_id) == task
     assert (
         state_4.permission_requests.get(pending.permission_request_id)
         == pending
