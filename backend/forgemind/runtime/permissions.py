@@ -5,6 +5,7 @@ from collections.abc import Callable
 from forgemind.schema.actions import (
     AcceptedEditFileToolAction,
     AcceptedReadFileToolAction,
+    AcceptedRunCommandToolAction,
     AcceptedRunTestsToolAction,
     AcceptedToolAction,
 )
@@ -17,6 +18,7 @@ from forgemind.schema.observations import (
 from forgemind.schema.permissions import (
     PendingEditFilePermissionRequest,
     PendingReadFilePermissionRequest,
+    PendingRunCommandPermissionRequest,
     PendingRunTestsPermissionRequest,
     PermissionCheckOutcome,
     PermissionCheckResult,
@@ -166,6 +168,43 @@ def create_and_register_pending_run_tests_permission_request(
     return pending
 
 
+def create_and_register_pending_run_command_permission_request(
+    action: AcceptedRunCommandToolAction,
+    permission_check: PermissionCheckResult,
+    *,
+    requests: InMemoryPermissionRequestRegistry,
+    next_permission_request_id: PermissionRequestIdFactory,
+) -> PendingRunCommandPermissionRequest:
+    """把 run_command 确认结论转换为已登记的用户询问。"""
+
+    # 第一步：确认权限结论精确属于当前 run_command Action。
+    if permission_check.action_id != action.action_id:
+        raise PermissionCheckActionMismatchError(
+            "权限检查结果与当前 run_command Action 不一致"
+        )
+    # 第二步：确认结论是 confirmation_required，其他分支不能询问用户。
+    if (
+        permission_check.outcome
+        is not PermissionCheckOutcome.CONFIRMATION_REQUIRED
+    ):
+        raise PermissionOutcomeNotConfirmationRequiredError(
+            "只有 confirmation_required 能创建待确认权限请求"
+        )
+    # 第三步：用编号工厂和 Action 的完整参数快照构造 pending 请求。
+    pending = PendingRunCommandPermissionRequest(
+        permission_request_id=next_permission_request_id(),
+        task_id=action.task_id,
+        action_id=action.action_id,
+        status="pending",
+        action_type=action.action_type,
+        tool_name=action.tool_name,
+        arguments=action.arguments,
+        reason=permission_check.reason,
+        basis_ids=permission_check.basis_ids,
+    )
+    # 第四步：先把 pending 登记进 State，再返回同一个对象。
+    requests.register(pending)
+    return pending
 def resolve_registered_permission_decision(
     permission_decision_id: str,
     *,

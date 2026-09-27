@@ -205,6 +205,8 @@ Agent 只提交 program 逻辑别名、独立 args tuple、显式项目相对 wo
 
 Agent 的 RunCommandToolCallDecision 不含 action_id。Runtime 接受决策时分配 action_id、附加 task_id，并把原有不可变 arguments 对象保存进 AcceptedRunCommandToolAction。注册表按 action_id 拒绝覆盖；碰撞时 Runtime 只能重新分配编号，不能删除或改写旧 Action。下一阶段对这个已登记的具体 Action 请求用户授权。
 
+run_command 一律按已登记的具体 Action 请求用户确认。PendingRunCommandPermissionRequest 保存 action_id、完整 program/args/working_directory/timeout 快照、询问原因和策略依据。即使 action_id 相同，任何参数变化也会导致登记失败；用户批准后只能从 Action 注册表恢复原对象。用户拒绝发生在 Tool 执行前，形成 PERMISSION_DENIED 的 rejected Observation。
+
 Runtime 允许列表把 program 别名映射到确定的绝对可执行文件路径。别名未允许时拒绝 Action；策略提供相对程序路径属于 Runtime 配置错误。工作目录复用项目路径边界解析，但本阶段不声称程序或目录已经存在，真实存在性留给 Tool 执行报告。
 
 进程正常启动并在超时前结束后，RunCommandResult 保存原程序别名、真实 executable、原 args、原 working_directory、退出码、耗时、stdout/stderr 和截断事实。非零退出码仍是已完成进程的真实结果，不自动等同于 Tool 调用失败或整个任务失败。

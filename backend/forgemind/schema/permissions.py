@@ -8,6 +8,7 @@ from pydantic import Field, model_validator
 from forgemind.schema.base import StrictContractModel
 from forgemind.schema.edit_file import EditFileArguments
 from forgemind.schema.read_file import ReadFileArguments
+from forgemind.schema.run_command import RunCommandArguments
 from forgemind.schema.run_tests import RunTestsArguments
 
 
@@ -94,10 +95,25 @@ class PendingRunTestsPermissionRequest(StrictContractModel):
     basis_ids: tuple[NonEmptyBasisId, ...] = Field(min_length=1)
 
 
+class PendingRunCommandPermissionRequest(StrictContractModel):
+    """等待用户确认的 run_command 权限请求快照。"""
+
+    permission_request_id: str = Field(min_length=1)
+    task_id: str = Field(min_length=1)
+    action_id: str = Field(min_length=1)
+    status: Literal["pending"]
+    action_type: Literal["tool_call"]
+    tool_name: Literal["run_command"]
+    arguments: RunCommandArguments
+    reason: str = Field(min_length=1)
+    basis_ids: tuple[NonEmptyBasisId, ...] = Field(min_length=1)
+
+
 PendingPermissionRequest = (
     PendingReadFilePermissionRequest
     | PendingEditFilePermissionRequest
     | PendingRunTestsPermissionRequest
+    | PendingRunCommandPermissionRequest
 )
 
 
