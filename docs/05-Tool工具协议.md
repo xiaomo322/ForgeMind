@@ -211,6 +211,8 @@ run_command 一律按已登记的具体 Action 请求用户确认。PendingRunCo
 
 Runtime 在 Tool 前解析程序策略和工作目录：项目外目录、未允许程序或无效允许列表形成 rejected Observation。Tool 调用后的启动失败和超时形成 failed Observation。取得 RunCommandResult 后形成 success Observation，即使 exit_code 非零；Runtime 会核对结果中的 program、executable、args 和 working_directory 与权威 ResolvedCommandContext 一致后再写入 State。
 
+模块级真实测试已经贯通 Decision、AcceptedAction、待确认权限请求、用户批准、恢复原 Action、真实 Python 子进程和 success Observation。测试实际输出 `forgemind-command-ok`、退出码 0，并确认 Observation 注册表保存同一权威对象。run_command V0.1 至此完成。
+
 Runtime 允许列表把 program 别名映射到确定的绝对可执行文件路径。别名未允许时拒绝 Action；策略提供相对程序路径属于 Runtime 配置错误。工作目录复用项目路径边界解析，但本阶段不声称程序或目录已经存在，真实存在性留给 Tool 执行报告。
 
 进程正常启动并在超时前结束后，RunCommandResult 保存原程序别名、真实 executable、原 args、原 working_directory、退出码、耗时、stdout/stderr 和截断事实。非零退出码仍是已完成进程的真实结果，不自动等同于 Tool 调用失败或整个任务失败。
