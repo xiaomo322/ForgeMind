@@ -1,5 +1,6 @@
 """任务创建时不可覆盖的来源事实。"""
 
+from enum import StrEnum
 from pathlib import Path
 
 from pydantic import Field, field_validator
@@ -38,3 +39,23 @@ class TaskRecord(StrictContractModel):
             raise ValueError("project_root 必须是绝对路径")
 
         return project_root
+
+
+class TaskStatus(StrEnum):
+    """任务级生命周期状态；工具失败本身不会直接终止任务。"""
+
+    RUNNING = "running"
+    WAITING_USER = "waiting_user"
+    COMPLETED = "completed"
+    BLOCKED = "blocked"
+    CANCELLED = "cancelled"
+
+
+class TaskStatusRecord(StrictContractModel):
+    """一次不可覆盖的任务状态事实。"""
+
+    task_status_id: str = Field(min_length=1)
+    task_id: str = Field(min_length=1)
+    revision: int = Field(ge=1)
+    status: TaskStatus
+    reason: str = Field(min_length=1)

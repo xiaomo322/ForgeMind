@@ -36,6 +36,8 @@ State 和本轮模型上下文不能混为一体。上下文可以裁剪或摘�
 
 Action 写入前必须确认 task_id 已在 tasks 表登记，数据库外键同时阻止孤立引用。因此重启后恢复一条 Action 时，可以继续追溯到用户原始请求和项目边界。
 
+任务当前状态不覆盖 TaskRecord，而是通过带连续 revision 的 TaskStatusRecord 追加。Runtime 使用固定转换表拒绝终态重开、同状态重复和 WAITING_USER 直接完成。
+
 Action、Observation 和权限记录通过 `task_id`、`action_id`、`permission_request_id` 与 `permission_decision_id` 建立明确关联。Registry 采用追加式规则，已有事实不能被同编号的新对象覆盖。
 
 ## 3. 规划中的任务 State
