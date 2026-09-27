@@ -209,6 +209,8 @@ run_command 一律按已登记的具体 Action 请求用户确认。PendingRunCo
 
 真实执行只接受 Runtime 已解析的 ResolvedCommandContext，使用参数元组、明确 cwd、超时、check=False 和 shell=False 调用子进程。程序正常结束时，无论退出码是否为零都返回 RunCommandResult；无法启动或超时才是 Tool 错误。stdout/stderr 分别最多向 Agent 返回 64 KiB，并通过 is_output_truncated 说明是否截断。V0.1 临时输出文件在进程运行期间仍可能增长，磁盘总量控制、环境变量收敛和派生子进程清理留待资源隔离阶段处理。
 
+Runtime 在 Tool 前解析程序策略和工作目录：项目外目录、未允许程序或无效允许列表形成 rejected Observation。Tool 调用后的启动失败和超时形成 failed Observation。取得 RunCommandResult 后形成 success Observation，即使 exit_code 非零；Runtime 会核对结果中的 program、executable、args 和 working_directory 与权威 ResolvedCommandContext 一致后再写入 State。
+
 Runtime 允许列表把 program 别名映射到确定的绝对可执行文件路径。别名未允许时拒绝 Action；策略提供相对程序路径属于 Runtime 配置错误。工作目录复用项目路径边界解析，但本阶段不声称程序或目录已经存在，真实存在性留给 Tool 执行报告。
 
 进程正常启动并在超时前结束后，RunCommandResult 保存原程序别名、真实 executable、原 args、原 working_directory、退出码、耗时、stdout/stderr 和截断事实。非零退出码仍是已完成进程的真实结果，不自动等同于 Tool 调用失败或整个任务失败。

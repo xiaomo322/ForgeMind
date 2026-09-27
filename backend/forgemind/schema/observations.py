@@ -6,6 +6,7 @@ from pydantic import Field
 from forgemind.schema.base import StrictContractModel
 from forgemind.schema.edit_file import EditFileResult
 from forgemind.schema.read_file import ReadFileResult
+from forgemind.schema.run_command import RunCommandResult
 from forgemind.schema.run_tests import RunTestsResult
 from forgemind.schema.search_code import SearchCodeResult
 
@@ -35,6 +36,10 @@ class ObservationErrorCode(StrEnum):
     TEST_REPORT_UNAVAILABLE = "TEST_REPORT_UNAVAILABLE"
     TEST_REPORT_TOO_LARGE = "TEST_REPORT_TOO_LARGE"
     TEST_REPORT_INVALID = "TEST_REPORT_INVALID"
+    PROGRAM_NOT_ALLOWED = "PROGRAM_NOT_ALLOWED"
+    INVALID_PROGRAM_POLICY = "INVALID_PROGRAM_POLICY"
+    COMMAND_START_FAILED = "COMMAND_START_FAILED"
+    COMMAND_TIMEOUT = "COMMAND_TIMEOUT"
 
 
 class ObservationErrorDetail(StrictContractModel):
@@ -102,6 +107,14 @@ class RunTestsSuccessObservation(StrictContractModel):
     result: RunTestsResult
 
 
+class RunCommandSuccessObservation(StrictContractModel):
+    """run_command 已取得真实完成进程结果后形成的事实记录。"""
+
+    action_id: str = Field(min_length=1)
+    status: Literal["success"]
+    result: RunCommandResult
+
+
 TerminalObservation = (
     RejectedObservation
     | FailedObservation
@@ -109,4 +122,5 @@ TerminalObservation = (
     | SearchCodeSuccessObservation
     | EditFileSuccessObservation
     | RunTestsSuccessObservation
+    | RunCommandSuccessObservation
 )
