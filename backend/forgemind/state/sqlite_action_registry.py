@@ -42,6 +42,12 @@ class SQLiteActionRegistry:
                 """
             )
 
+    @property
+    def database_path(self) -> Path:
+        """返回该 Registry 使用的数据库路径，供关联 Registry 核对。"""
+
+        return self._database_path
+
     def register(self, action: AcceptedToolAction) -> None:
         """在一个事务中追加 Action；重复编号不能覆盖原记录。"""
 

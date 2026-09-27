@@ -86,12 +86,14 @@ ForgeMindState
 
 原 Registry 只存在于进程内，程序退出后记录会丢失。当前已通过 ADR-0001 选择 SQLite，并先完成 AcceptedAction 持久化；后续按以下顺序补齐：
 
-1. 持久化权限请求、用户决定与 Observation；
+1. 持久化用户决定与 Observation；
 2. 定义任务级 `ForgeMindState`；
 3. 实现 Context Builder 和每轮输入预算；
 4. 实现统一 Agent Loop；
 5. 跑通真实 Bug 修复案例。
 
 SQLite Registry 从 JSON 重建严格模型，因此重启后保证值和类型一致，不承诺 Python 对象身份一致。数据库主键和事务负责磁盘层防覆盖，Pydantic 负责读取时的结构校验。
+
+权限请求已通过外键引用 actions 表，同时在 Python 层核对 task_id、action_type、tool_name 和完整 arguments 快照。数据库引用存在并不等于授权范围正确，因此两层校验都必须保留。
 
 长期项目记忆、用户偏好、跨任务经验和 RAG 均不属于当前 MVP。
