@@ -62,12 +62,12 @@ docs/         # 01–16 正式设计文档和开发日志
 - search_code 的严格契约、Action 登记、安全范围解析、受限文本搜索和 success/rejected/failed 终态登记。
 - edit_file 的版本绑定、逐 Action 用户确认、唯一精确替换、真实 diff、同目录临时文件和原子替换闭环。
 - run_tests 的显式目标、逐 Action 权限、安全解析、真实 pytest、JUnit XML 及 Runtime/Observation 闭环。
-- run_command 的严格参数/结果契约、程序策略、Decision/AcceptedAction 登记和逐 Action 用户授权。
+- run_command 的严格契约、程序策略、Action 登记、逐 Action 授权和受控真实进程执行。
 
-run_command 的 Tool/Observation 闭环、持久化 State 及完整 Agent Loop 尚未实现。
+run_command 的 Observation 闭环、持久化 State 及完整 Agent Loop 尚未实现。
 
 ## 当前学习进度
 
-当前学习 `06-数据结构设计`（更新于 2026-09-27）。read_file、search_code、edit_file 与 run_tests V0.1 均已形成完整证据链；run_command 已完成严格 Schema、程序策略、Action 登记和逐 Action 用户授权，下一步实现真实进程执行。当前完整测试 308 项通过。详细设计演进见 `docs/06-数据结构设计.md`，逐步开发记录见 `docs/16-项目开发日志.md`。
+当前学习 `06-数据结构设计`（更新于 2026-09-27）。read_file、search_code、edit_file 与 run_tests V0.1 均已形成完整证据链；run_command 已完成严格 Schema、程序策略、Action 登记、逐 Action 授权和真实进程执行，下一步接入 Observation/State。当前完整测试 313 项通过。详细设计演进见 `docs/06-数据结构设计.md`，逐步开发记录见 `docs/16-项目开发日志.md`。
 
 每个切片只处理一个主要概念，并明确留出核心代码由用户先写；AI 提供脚手架、测试和基于真实错误的 Debug 支持。
