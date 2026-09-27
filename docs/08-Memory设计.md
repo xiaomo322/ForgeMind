@@ -32,6 +32,8 @@ State 和本轮模型上下文不能混为一体。上下文可以裁剪或摘�
 
 四个对应的 SQLite Registry 保存相同事实，并使用同一个数据库建立主键、唯一键和外键约束。完整流程已经验证：程序可以在等待用户、用户批准和命令执行之间多次重启，随后仍从数据库恢复同一条权威证据链。
 
+`SQLiteForgeMindState.open()` 是这些 Registry 的统一组合入口。它固定依赖创建顺序并统一数据库绝对路径，避免调用方重复编排或误把不同数据库的 Registry 组合在一起。
+
 Action、Observation 和权限记录通过 `task_id`、`action_id`、`permission_request_id` 与 `permission_decision_id` 建立明确关联。Registry 采用追加式规则，已有事实不能被同编号的新对象覆盖。
 
 ## 3. 规划中的任务 State

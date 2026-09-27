@@ -19,26 +19,7 @@ from forgemind.schema.permissions import (
     PermissionDecisionRecord,
 )
 from forgemind.schema.run_command import RunCommandArguments
-from forgemind.state.sqlite_action_registry import SQLiteActionRegistry
-from forgemind.state.sqlite_observation_registry import (
-    SQLiteObservationRegistry,
-)
-from forgemind.state.sqlite_permission_decision_registry import (
-    SQLitePermissionDecisionRegistry,
-)
-from forgemind.state.sqlite_permission_request_registry import (
-    SQLitePermissionRequestRegistry,
-)
-
-
-def _open_state(database_path: Path):
-    """模拟一次进程启动时，从同一数据库建立四个 Registry。"""
-
-    actions = SQLiteActionRegistry(database_path)
-    requests = SQLitePermissionRequestRegistry(database_path, actions)
-    decisions = SQLitePermissionDecisionRegistry(database_path, requests)
-    observations = SQLiteObservationRegistry(database_path, actions)
-    return actions, requests, decisions, observations
+from forgemind.state.sqlite_state import SQLiteForgeMindState
 
 
 def test_sqlite_state_survives_wait_approve_execute_restarts(
@@ -48,9 +29,7 @@ def test_sqlite_state_survives_wait_approve_execute_restarts(
 
     # 第一步：确定 state.db 路径，并模拟第一次启动创建四个 Registry。
     database_path = tmp_path / "state.db"
-    actions_1, requests_1, decisions_1, observations_1 = _open_state(
-        database_path
-    )
+    state_1 = SQLiteForgeMindState.open(database_path)
     # 第二步：创建 run_command Decision，执行当前 Python 输出固定标记。
     decision = RunCommandToolCallDecision(
         action_type="tool_call",
@@ -67,7 +46,7 @@ def test_sqlite_state_survives_wait_approve_execute_restarts(
     action = accept_and_register_run_command_decision(
         decision,
         task_id="task-persistent-001",
-        registry=actions_1,
+        registry=state_1.actions,
         next_action_id=lambda: "action-persistent-001",
     )
     # 第四步：创建 confirmation_required 结果和 pending 权限请求；
@@ -83,20 +62,20 @@ def test_sqlite_state_survives_wait_approve_execute_restarts(
     pending = create_and_register_pending_run_command_permission_request(
         action,
         confirmation_required,
-        requests=requests_1,
+        requests=state_1.permission_requests,
         next_permission_request_id=lambda: "permission-persistent-001",
     )
 
     with pytest.raises(KeyError):
-        observations_1.get(action.action_id)
-    # 第五步：调用 _open_state 模拟程序重启。分别恢复 Action 和 pending，
+        state_1.observations.get(action.action_id)
+    # 第五步：重新打开统一 State 模拟程序重启。分别恢复 Action 和 pending，
     # 断言它们与原记录值相等，但不是原来的 Python 对象。
-    actions_2, requests_2, decisions_2, observations_2 = _open_state(
-        database_path
-    )
+    state_2 = SQLiteForgeMindState.open(database_path)
 
-    restored_action = actions_2.get(action.action_id)
-    restored_pending = requests_2.get(pending.permission_request_id)
+    restored_action = state_2.actions.get(action.action_id)
+    restored_pending = state_2.permission_requests.get(
+        pending.permission_request_id
+    )
 
     assert restored_action == action
     assert restored_action is not action
@@ -114,17 +93,15 @@ def test_sqlite_state_survives_wait_approve_execute_restarts(
         raw_response="同意执行这次命令",
     )
 
-    decisions_2.record(user_decision)
-    # 第七步：再次调用 _open_state 模拟第二次重启，只按决定 ID 恢复
+    state_2.permission_decisions.record(user_decision)
+    # 第七步：再次打开统一 State 模拟第二次重启，只按决定 ID 恢复
     # 权威 Action 和 allowed 权限结论。
-    actions_3, requests_3, decisions_3, observations_3 = _open_state(
-        database_path
-    )
+    state_3 = SQLiteForgeMindState.open(database_path)
 
     resumed_action, allowed = resolve_registered_permission_decision(
         user_decision.permission_decision_id,
-        actions=actions_3,
-        decisions=decisions_3,
+        actions=state_3.actions,
+        decisions=state_3.permission_decisions,
     )
 
     assert resumed_action == action
@@ -139,14 +116,12 @@ def test_sqlite_state_survives_wait_approve_execute_restarts(
         allowed_programs={
             "python": Path(sys.executable).resolve(),
         },
-        observations=observations_3,
+        observations=state_3.observations,
     )
-    # 第九步：第三次调用 _open_state，再按 action_id 恢复最终 Observation。
-    actions_4, requests_4, decisions_4, observations_4 = _open_state(
-        database_path
-    )
+    # 第九步：第三次打开统一 State，再按 action_id 恢复最终 Observation。
+    state_4 = SQLiteForgeMindState.open(database_path)
 
-    restored_observation = observations_4.get(action.action_id)
+    restored_observation = state_4.observations.get(action.action_id)
 
     # 第十步：断言 status=success、exit_code=0、stdout 含
     # "forgemind-persistent-state-ok"，并确认四类记录都仍可读取。
@@ -159,9 +134,14 @@ def test_sqlite_state_survives_wait_approve_execute_restarts(
         in restored_observation.result.stdout
     )
 
-    assert actions_4.get(action.action_id) == action
-    assert requests_4.get(pending.permission_request_id) == pending
+    assert state_4.actions.get(action.action_id) == action
     assert (
-            decisions_4.get(user_decision.permission_decision_id)
+        state_4.permission_requests.get(pending.permission_request_id)
+        == pending
+    )
+    assert (
+        state_4.permission_decisions.get(
+            user_decision.permission_decision_id
+        )
             == user_decision
     )
