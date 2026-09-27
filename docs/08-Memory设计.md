@@ -86,7 +86,7 @@ ForgeMindState
 
 原 Registry 只存在于进程内，程序退出后记录会丢失。当前已通过 ADR-0001 选择 SQLite，并先完成 AcceptedAction 持久化；后续按以下顺序补齐：
 
-1. 持久化 Observation；
+1. 用完整重启流程验证四类 SQLite Registry；
 2. 定义任务级 `ForgeMindState`；
 3. 实现 Context Builder 和每轮输入预算；
 4. 实现统一 Agent Loop；
@@ -97,5 +97,7 @@ SQLite Registry 从 JSON 重建严格模型，因此重启后保证值和类型�
 权限请求已通过外键引用 actions 表，同时在 Python 层核对 task_id、action_type、tool_name 和完整 arguments 快照。数据库引用存在并不等于授权范围正确，因此两层校验都必须保留。
 
 权限决定表同时约束 permission_decision_id 主键和 permission_request_id 唯一键。前者防止决定编号复用，后者保证同一次询问只能保存第一次最终回答；更换决定编号不能覆盖 approve 或 reject 历史。
+
+Observation 表直接以 action_id 为主键并外键引用 Action。它表达每个 Action 的唯一终态，因此首次 success、rejected 或 failed 写入后，任何第二终态都不能覆盖原事实。
 
 长期项目记忆、用户偏好、跨任务经验和 RAG 均不属于当前 MVP。
