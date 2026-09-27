@@ -198,3 +198,11 @@ V0.1 使用当前 `sys.executable -m pytest` 和参数列表启动进程，固�
 Runtime 先解析全部目标：路径逃逸或 node id 格式错误发生在 Tool 调用前，登记 rejected。pytest 无法启动、超时、报告缺失、超限或无效发生在 Tool 阶段，登记 failed。取得可信报告后登记 success；其中 result.test_outcome 仍可为 failed，表示 Tool 成功获得“测试用例失败”的证据。成功结果和各类失败证据都以同一个 action_id 写入唯一终态 Observation。
 
 run_tests 会执行项目代码，因此 AcceptedAction 进入 Tool 前需经过权限检查。需要确认时，PendingRunTestsPermissionRequest 保存 action_id、完整 targets、timeout、原因和策略依据；用户决定只按已登记 permission_decision_id 恢复 State 中的原 Action。拒绝形成 PERMISSION_DENIED 的 rejected Observation，批准后仍需继续路径和执行检查。V0.1 的授权绑定操作范围，但尚未绑定整个项目的内容快照，批准后代码变化风险留待项目快照机制处理。
+
+## 19. run_command V0.1 参数、结果与程序策略（2026-09-27）
+
+Agent 只提交 program 逻辑别名、独立 args tuple、显式项目相对 working_directory 和 1～900 秒 timeout。program 别名只能包含字母、数字、点、下划线和连字符，不能携带路径、空格或 Shell 语法；args 可以包含空格、空字符串或选项，因为每项保持独立参数边界且后续固定不经过 Shell。
+
+Runtime 允许列表把 program 别名映射到确定的绝对可执行文件路径。别名未允许时拒绝 Action；策略提供相对程序路径属于 Runtime 配置错误。工作目录复用项目路径边界解析，但本阶段不声称程序或目录已经存在，真实存在性留给 Tool 执行报告。
+
+进程正常启动并在超时前结束后，RunCommandResult 保存原程序别名、真实 executable、原 args、原 working_directory、退出码、耗时、stdout/stderr 和截断事实。非零退出码仍是已完成进程的真实结果，不自动等同于 Tool 调用失败或整个任务失败。
