@@ -65,11 +65,12 @@ docs/         # 01–16 正式设计文档和开发日志
 - run_command V0.1 的严格契约、程序策略、Action 登记、逐 Action 授权、真实进程执行和完整证据链。
 - SQLite 持久化 Action、权限请求、用户决定和 Observation，并已验证跨三次重启恢复完整执行链。
 - `SQLiteForgeMindState.open()` 统一建立同一数据库上的四个 Registry，调用方不再手工连接依赖。
+- 最小不可变 `TaskRecord` 保存 Runtime 任务编号、用户原始请求和绝对项目根目录。
 
 统一任务 State 及完整 Agent Loop 尚未实现。
 
 ## 当前学习进度
 
-当前学习 `06-数据结构设计`（更新于 2026-09-27）。五个 Tool V0.1 均已形成完整证据链；SQLite 四类权威事实已通过跨重启完整流程测试，并由 `SQLiteForgeMindState` 统一组合。下一步定义持久化的 `TaskRecord`，使 task_id 对应真实任务，而不是散落在事实中的孤立字符串。当前完整测试 346 项通过。详细设计演进见 `docs/06-数据结构设计.md`，逐步开发记录见 `docs/16-项目开发日志.md`。
+当前学习 `06-数据结构设计`（更新于 2026-09-27）。五个 Tool V0.1 均已形成完整证据链；SQLite 四类权威事实已通过跨重启完整流程测试，并由 `SQLiteForgeMindState` 统一组合。最小 `TaskRecord` 已定义，下一步用 SQLite 持久化任务来源事实。当前完整测试 351 项通过。详细设计演进见 `docs/06-数据结构设计.md`，逐步开发记录见 `docs/16-项目开发日志.md`。
 
 每个切片只处理一个主要概念，并明确留出核心代码由用户先写；AI 提供脚手架、测试和基于真实错误的 Debug 支持。

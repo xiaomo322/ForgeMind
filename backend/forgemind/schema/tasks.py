@@ -1,0 +1,40 @@
+"""任务创建时不可覆盖的来源事实。"""
+
+from pathlib import Path
+
+from pydantic import Field, field_validator
+
+from forgemind.schema.base import StrictContractModel
+
+
+class TaskRecord(StrictContractModel):
+    """由 Runtime 建立的任务身份、用户原话和项目边界。"""
+
+    task_id: str = Field(min_length=1)
+    original_request: str = Field(min_length=1)
+    project_root: str = Field(min_length=1)
+
+    @field_validator("task_id", "original_request", "project_root")
+    @classmethod
+    def require_visible_text(cls, value: str) -> str:
+        """拒绝只有空白符的必填文本，同时保留用户原始内容。"""
+
+        # 第一步：使用 value.strip() 判断内容是否只包含空格、换行等空白。
+        if not value.strip():
+            # 第二步：如果清理后为空，抛出 ValueError；不要返回清理后的字符串，
+            # 因为 original_request 必须保留用户输入的原始内容。
+            raise ValueError("必填文本不能只包含空白字符")
+        # 第三步：校验通过后原样返回 value。
+        return value
+
+    @field_validator("project_root")
+    @classmethod
+    def require_absolute_project_root(cls, project_root: str) -> str:
+        """任务必须绑定 Runtime 已解析的绝对项目根目录。"""
+
+        # 第一步：使用 Path(project_root).is_absolute() 检查绝对路径。
+        if not Path(project_root).is_absolute():
+            # 第二步：相对路径抛出 ValueError，绝对路径原样返回。
+            raise ValueError("project_root 必须是绝对路径")
+
+        return project_root
