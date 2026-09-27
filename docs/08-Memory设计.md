@@ -34,6 +34,8 @@ State 和本轮模型上下文不能混为一体。上下文可以裁剪或摘�
 
 `SQLiteForgeMindState.open()` 是这些 Registry 的统一组合入口。它先创建保存任务来源事实的 SQLiteTaskRegistry，再建立 Action、权限和 Observation Registry，固定依赖创建顺序并统一数据库绝对路径，避免调用方重复编排或误把不同数据库的 Registry 组合在一起。
 
+Action 写入前必须确认 task_id 已在 tasks 表登记，数据库外键同时阻止孤立引用。因此重启后恢复一条 Action 时，可以继续追溯到用户原始请求和项目边界。
+
 Action、Observation 和权限记录通过 `task_id`、`action_id`、`permission_request_id` 与 `permission_decision_id` 建立明确关联。Registry 采用追加式规则，已有事实不能被同编号的新对象覆盖。
 
 ## 3. 规划中的任务 State

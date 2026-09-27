@@ -16,6 +16,14 @@ class DuplicateTaskIdError(ValueError):
         super().__init__(f"task_id 已存在：{task_id}")
 
 
+class UnknownTaskIdError(KeyError):
+    """Action 引用的 task_id 尚未登记。"""
+
+    def __init__(self, task_id: str) -> None:
+        self.task_id = task_id
+        super().__init__(task_id)
+
+
 class CorruptStoredTaskError(RuntimeError):
     """磁盘任务无法通过严格契约或索引列一致性检查。"""
 

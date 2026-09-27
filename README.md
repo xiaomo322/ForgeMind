@@ -67,11 +67,12 @@ docs/         # 01–16 正式设计文档和开发日志
 - `SQLiteForgeMindState.open()` 统一建立同一数据库上的五个 Registry，调用方不再手工连接依赖。
 - 最小不可变 `TaskRecord` 保存 Runtime 任务编号、用户原始请求和绝对项目根目录。
 - `SQLiteTaskRegistry` 以事务和主键持久化任务，并已接入统一 State 与跨重启流程。
+- SQLite Action 登记要求 task_id 已存在，并由 Python 明确错误与数据库外键共同阻止孤立 Action。
 
 统一任务 State 及完整 Agent Loop 尚未实现。
 
 ## 当前学习进度
 
-当前学习 `06-数据结构设计`（更新于 2026-09-27）。五个 Tool V0.1 均已形成完整证据链；Task、Action、权限和 Observation 已由 `SQLiteForgeMindState` 统一组合并可跨重启恢复。下一步约束 Action 的 task_id 必须引用已登记任务。当前完整测试 356 项通过。详细设计演进见 `docs/06-数据结构设计.md`，逐步开发记录见 `docs/16-项目开发日志.md`。
+当前学习 `06-数据结构设计`（更新于 2026-09-27）。五个 Tool V0.1 均已形成完整证据链；Task、Action、权限和 Observation 已由 `SQLiteForgeMindState` 统一组合并可跨重启恢复，Action 不能脱离已登记 Task。下一步实现追加式任务状态记录与合法状态转换。当前完整测试 357 项通过。详细设计演进见 `docs/06-数据结构设计.md`，逐步开发记录见 `docs/16-项目开发日志.md`。
 
 每个切片只处理一个主要概念，并明确留出核心代码由用户先写；AI 提供脚手架、测试和基于真实错误的 Debug 支持。

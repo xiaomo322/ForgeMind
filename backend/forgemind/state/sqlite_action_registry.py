@@ -7,6 +7,7 @@ from pydantic import TypeAdapter, ValidationError
 
 from forgemind.schema.actions import AcceptedToolAction
 from forgemind.state.action_registry import DuplicateActionIdError
+from forgemind.state.sqlite_task_registry import UnknownTaskIdError
 
 
 _ACTION_ADAPTER = TypeAdapter(AcceptedToolAction)
@@ -37,7 +38,8 @@ class SQLiteActionRegistry:
                     action_id TEXT PRIMARY KEY,
                     task_id TEXT NOT NULL,
                     tool_name TEXT NOT NULL,
-                    payload_json TEXT NOT NULL
+                    payload_json TEXT NOT NULL,
+                    FOREIGN KEY (task_id) REFERENCES tasks(task_id)
                 )
                 """
             )
@@ -60,6 +62,22 @@ class SQLiteActionRegistry:
             # VALUES (?, ?, ?, ?)
             # 参数必须单独传入，不能拼接 SQL 字符串。
             with sqlite3.connect(self._database_path) as connection:
+                connection.execute("PRAGMA foreign_keys = ON")
+
+                # 第三步：在同一个事务中查询 tasks 表，确认
+                # action.task_id 已经登记；不存在时抛出
+                # UnknownTaskIdError(action.task_id)。
+                task_row = connection.execute(
+                    """
+                    SELECT 1
+                    FROM tasks
+                    WHERE task_id = ?
+                    """,
+                    (action.task_id,),
+                ).fetchone()
+
+                if task_row is None:
+                    raise UnknownTaskIdError(action.task_id)
                 connection.execute(
                     """
                     INSERT INTO actions (
@@ -77,7 +95,7 @@ class SQLiteActionRegistry:
                         payload_json,
                     ),
                 )
-        # 第三步：捕获 sqlite3.IntegrityError，把主键冲突转换为现有的
+        # 第四步：捕获 sqlite3.IntegrityError，把主键冲突转换为现有的
         # DuplicateActionIdError，并用 ``from None`` 隐藏数据库细节。
         except sqlite3.IntegrityError:
             raise DuplicateActionIdError(action.action_id) from None

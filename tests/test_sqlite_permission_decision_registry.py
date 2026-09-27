@@ -10,6 +10,7 @@ from forgemind.schema.permissions import (
     PermissionDecisionRecord,
 )
 from forgemind.schema.run_command import RunCommandArguments
+from forgemind.schema.tasks import TaskRecord
 from forgemind.state.permission_decision_registry import (
     DuplicatePermissionDecisionIdError,
     DuplicatePermissionRequestDecisionError,
@@ -24,6 +25,7 @@ from forgemind.state.sqlite_permission_decision_registry import (
 from forgemind.state.sqlite_permission_request_registry import (
     SQLitePermissionRequestRegistry,
 )
+from forgemind.state.sqlite_task_registry import SQLiteTaskRegistry
 
 
 def _action() -> AcceptedRunCommandToolAction:
@@ -77,6 +79,17 @@ def _decision(
 
 
 def _registries(database_path: Path):
+    tasks = SQLiteTaskRegistry(database_path)
+    try:
+        tasks.get("task-001")
+    except KeyError:
+        tasks.register(
+            TaskRecord(
+                task_id="task-001",
+                original_request="测试权限决定持久化",
+                project_root=str(database_path.parent.resolve()),
+            )
+        )
     actions = SQLiteActionRegistry(database_path)
     requests = SQLitePermissionRequestRegistry(database_path, actions)
     decisions = SQLitePermissionDecisionRegistry(database_path, requests)

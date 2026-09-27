@@ -11,6 +11,7 @@ from forgemind.schema.observations import (
     RunCommandSuccessObservation,
 )
 from forgemind.schema.run_command import RunCommandArguments, RunCommandResult
+from forgemind.schema.tasks import TaskRecord
 from forgemind.state.observation_registry import (
     DuplicateObservationError,
     UnknownActionIdError,
@@ -20,6 +21,7 @@ from forgemind.state.sqlite_observation_registry import (
     CorruptStoredObservationError,
     SQLiteObservationRegistry,
 )
+from forgemind.state.sqlite_task_registry import SQLiteTaskRegistry
 
 
 def _action() -> AcceptedRunCommandToolAction:
@@ -70,6 +72,17 @@ def _rejected(action_id: str) -> RejectedObservation:
 def _registries(
     database_path: Path,
 ) -> tuple[SQLiteActionRegistry, SQLiteObservationRegistry]:
+    tasks = SQLiteTaskRegistry(database_path)
+    try:
+        tasks.get("task-001")
+    except KeyError:
+        tasks.register(
+            TaskRecord(
+                task_id="task-001",
+                original_request="测试 Observation 持久化",
+                project_root=str(database_path.parent.resolve()),
+            )
+        )
     actions = SQLiteActionRegistry(database_path)
     observations = SQLiteObservationRegistry(database_path, actions)
     return actions, observations
