@@ -7,10 +7,14 @@
 
 MVP 不引入独立的长期 Memory 或向量数据库。当前先用任务 State 支撑单次 Agent Loop，避免把项目历史、用户偏好和跨任务经验提前混入核心闭环。
 
-```text
-State              保存完整、权威的任务事实
-Agent Context      从 State 选择本轮决策需要的信息
-Long-term Memory   MVP 后再设计的跨任务记忆
+```mermaid
+flowchart LR
+    S["State：完整、权威的任务事实"] --> C["Context Builder：选择、裁剪与摘要"]
+    C --> A["Agent Context：本轮模型输入"]
+    A --> D["Agent 产生下一步 Decision"]
+    D --> R["Runtime 执行并形成新事实"]
+    R --> S
+    M["Long-term Memory：MVP 后"] -.未来扩展.-> C
 ```
 
 State 和本轮模型上下文不能混为一体。上下文可以裁剪或摘要，但不能改变 State 中的真实权限和执行结果。
