@@ -40,6 +40,8 @@ Action 写入前必须确认 task_id 已在 tasks 表登记，数据库外键同
 
 SQLiteTaskStatusRegistry 以 task_id/revision 唯一组合保存完整历史，并在追加前严格恢复上一版本。完整重启流程已验证等待用户和批准后恢复执行的状态不会丢失；Tool 成功不会自动把任务改成 COMPLETED。
 
+任务创建通过 SQLiteForgeMindState 的单一事务同时写入 TaskRecord 与初始 RUNNING 状态。进程不能在两次独立提交之间留下“有任务、无状态”的不完整 State。
+
 Action、Observation 和权限记录通过 `task_id`、`action_id`、`permission_request_id` 与 `permission_decision_id` 建立明确关联。Registry 采用追加式规则，已有事实不能被同编号的新对象覆盖。
 
 ## 3. 规划中的任务 State

@@ -28,7 +28,7 @@ def test_sqlite_state_survives_wait_approve_execute_restarts(
 ) -> None:
     """等待用户、批准和执行跨多次重启仍保持同一条证据链。"""
 
-    # 第一步：确定 state.db 路径，并模拟第一次启动创建四个 Registry。
+    # 第一步：确定 state.db 路径，并模拟第一次启动打开统一 State。
     database_path = tmp_path / "state.db"
     state_1 = SQLiteForgeMindState.open(database_path)
     task = TaskRecord(
@@ -36,7 +36,6 @@ def test_sqlite_state_survives_wait_approve_execute_restarts(
         original_request="运行命令并验证 SQLite State 跨重启恢复",
         project_root=str(tmp_path.resolve()),
     )
-    state_1.tasks.register(task)
     initial_status = TaskStatusRecord(
         task_status_id="status-persistent-001",
         task_id=task.task_id,
@@ -44,7 +43,7 @@ def test_sqlite_state_survives_wait_approve_execute_restarts(
         status=TaskStatus.RUNNING,
         reason="任务创建并开始执行",
     )
-    state_1.task_statuses.record(initial_status)
+    state_1.create_task(task, initial_status)
     # 第二步：创建 run_command Decision，执行当前 Python 输出固定标记。
     decision = RunCommandToolCallDecision(
         action_type="tool_call",
