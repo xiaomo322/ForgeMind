@@ -5,7 +5,7 @@ import sqlite3
 
 from pydantic import TypeAdapter, ValidationError
 
-from forgemind.schema.actions import AcceptedToolAction
+from forgemind.schema.actions import AcceptedToolAction, SequencedActionRecord
 from forgemind.state.action_registry import DuplicateActionIdError
 from forgemind.state.sqlite_task_registry import UnknownTaskIdError
 
@@ -16,9 +16,13 @@ _ACTION_ADAPTER = TypeAdapter(AcceptedToolAction)
 class CorruptStoredActionError(RuntimeError):
     """磁盘记录无法通过当前 AcceptedToolAction 严格契约。"""
 
-    def __init__(self, action_id: str, cause: ValidationError) -> None:
+    def __init__(
+        self,
+        action_id: str,
+        cause: ValidationError | None = None,
+    ) -> None:
         self.action_id = action_id
-        self.error_count = cause.error_count()
+        self.error_count = 0 if cause is None else cause.error_count()
         super().__init__(f"持久化 Action 无法解析：{action_id}")
 
 
@@ -37,8 +41,10 @@ class SQLiteActionRegistry:
                 CREATE TABLE IF NOT EXISTS actions (
                     action_id TEXT PRIMARY KEY,
                     task_id TEXT NOT NULL,
+                    task_sequence INTEGER NOT NULL,
                     tool_name TEXT NOT NULL,
                     payload_json TEXT NOT NULL,
+                    UNIQUE (task_id, task_sequence),
                     FOREIGN KEY (task_id) REFERENCES tasks(task_id)
                 )
                 """
@@ -63,6 +69,7 @@ class SQLiteActionRegistry:
             # 参数必须单独传入，不能拼接 SQL 字符串。
             with sqlite3.connect(self._database_path) as connection:
                 connection.execute("PRAGMA foreign_keys = ON")
+                connection.execute("BEGIN IMMEDIATE")
 
                 # 第三步：在同一个事务中查询 tasks 表，确认
                 # action.task_id 已经登记；不存在时抛出
@@ -78,24 +85,41 @@ class SQLiteActionRegistry:
 
                 if task_row is None:
                     raise UnknownTaskIdError(action.task_id)
+
+                # 第四步：查询该 task_id 当前最大的 task_sequence；没有
+                # Action 时从 1 开始，否则使用最大值 + 1。保存为
+                # next_sequence，查询和 INSERT 必须留在同一写事务中。
+                sequence_row = connection.execute(
+                    """
+                    SELECT COALESCE(MAX(task_sequence), 0) + 1
+                    FROM actions
+                    WHERE task_id = ?
+                    """,
+                    (action.task_id,),
+                ).fetchone()
+
+                next_sequence = sequence_row[0]
+
                 connection.execute(
                     """
                     INSERT INTO actions (
                         action_id,
                         task_id,
+                        task_sequence,
                         tool_name,
                         payload_json
                     )
-                    VALUES (?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?)
                     """,
                     (
                         action.action_id,
                         action.task_id,
+                        next_sequence,
                         action.tool_name,
                         payload_json,
                     ),
                 )
-        # 第四步：捕获 sqlite3.IntegrityError，把主键冲突转换为现有的
+        # 第五步：捕获 sqlite3.IntegrityError，把主键冲突转换为现有的
         # DuplicateActionIdError，并用 ``from None`` 隐藏数据库细节。
         except sqlite3.IntegrityError:
             raise DuplicateActionIdError(action.action_id) from None
@@ -105,14 +129,53 @@ class SQLiteActionRegistry:
 
         with sqlite3.connect(self._database_path) as connection:
             row = connection.execute(
-                "SELECT payload_json FROM actions WHERE action_id = ?",
+                """
+                SELECT task_id, payload_json
+                FROM actions
+                WHERE action_id = ?
+                """,
                 (action_id,),
             ).fetchone()
 
         if row is None:
             raise KeyError(action_id)
 
+        return self._restore(action_id, row[0], row[1])
+
+    def list_for_task(self, task_id: str) -> tuple[SequencedActionRecord, ...]:
+        """按 State 分配的任务内序号返回 Action，不按随机 ID 排序。"""
+
+        with sqlite3.connect(self._database_path) as connection:
+            rows = connection.execute(
+                """
+                SELECT action_id, task_sequence, task_id, payload_json
+                FROM actions
+                WHERE task_id = ?
+                ORDER BY task_sequence
+                """,
+                (task_id,),
+            ).fetchall()
+
+        return tuple(
+            SequencedActionRecord(
+                sequence=sequence,
+                action=self._restore(action_id, stored_task_id, payload_json),
+            )
+            for action_id, sequence, stored_task_id, payload_json in rows
+        )
+
+    @staticmethod
+    def _restore(
+        action_id: str,
+        stored_task_id: str,
+        payload_json: str,
+    ) -> AcceptedToolAction:
         try:
-            return _ACTION_ADAPTER.validate_json(row[0])
+            action = _ACTION_ADAPTER.validate_json(payload_json)
         except ValidationError as exc:
             raise CorruptStoredActionError(action_id, exc) from exc
+
+        if action.action_id != action_id or action.task_id != stored_task_id:
+            raise CorruptStoredActionError(action_id)
+
+        return action

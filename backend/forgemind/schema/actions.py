@@ -77,3 +77,10 @@ AcceptedToolAction = (
     | AcceptedRunTestsToolAction
     | AcceptedRunCommandToolAction
 )
+
+
+class SequencedActionRecord(StrictContractModel):
+    """State 为一个任务内的 AcceptedAction 分配的可靠登记顺序。"""
+
+    sequence: int = Field(ge=1)
+    action: AcceptedToolAction
