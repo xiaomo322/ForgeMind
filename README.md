@@ -69,11 +69,12 @@ docs/         # 01–16 正式设计文档和开发日志
 - `SQLiteTaskRegistry` 以事务和主键持久化任务，并已接入统一 State 与跨重启流程。
 - SQLite Action 登记要求 task_id 已存在，并由 Python 明确错误与数据库外键共同阻止孤立 Action。
 - `TaskStatusRecord` 以 revision 表达追加式状态历史，Runtime 已实现合法生命周期转换检查。
+- `SQLiteTaskStatusRegistry` 持久化连续状态历史，并已接入统一 State 和跨重启流程。
 
 统一任务 State 及完整 Agent Loop 尚未实现。
 
 ## 当前学习进度
 
-当前学习 `06-数据结构设计`（更新于 2026-09-27）。五个 Tool V0.1 均已形成完整证据链；Task、Action、权限和 Observation 已由 `SQLiteForgeMindState` 统一组合并可跨重启恢复。任务状态契约和确定性转换规则已完成，下一步持久化连续、不可覆盖的状态历史。当前完整测试 371 项通过。详细设计演进见 `docs/06-数据结构设计.md`，逐步开发记录见 `docs/16-项目开发日志.md`。
+当前学习 `06-数据结构设计`（更新于 2026-09-28）。五个 Tool V0.1 均已形成完整证据链；任务来源、连续生命周期、Action、权限和 Observation 已由 `SQLiteForgeMindState` 统一组合并可跨重启恢复。下一步把 TaskRecord 与初始 RUNNING 状态放入同一个创建事务，避免崩溃留下无状态任务。当前完整测试 380 项通过。详细设计演进见 `docs/06-数据结构设计.md`，逐步开发记录见 `docs/16-项目开发日志.md`。
 
 每个切片只处理一个主要概念，并明确留出核心代码由用户先写；AI 提供脚手架、测试和基于真实错误的 Debug 支持。

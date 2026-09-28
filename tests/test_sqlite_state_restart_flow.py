@@ -19,7 +19,7 @@ from forgemind.schema.permissions import (
     PermissionDecisionRecord,
 )
 from forgemind.schema.run_command import RunCommandArguments
-from forgemind.schema.tasks import TaskRecord
+from forgemind.schema.tasks import TaskRecord, TaskStatus, TaskStatusRecord
 from forgemind.state.sqlite_state import SQLiteForgeMindState
 
 
@@ -37,6 +37,14 @@ def test_sqlite_state_survives_wait_approve_execute_restarts(
         project_root=str(tmp_path.resolve()),
     )
     state_1.tasks.register(task)
+    initial_status = TaskStatusRecord(
+        task_status_id="status-persistent-001",
+        task_id=task.task_id,
+        revision=1,
+        status=TaskStatus.RUNNING,
+        reason="任务创建并开始执行",
+    )
+    state_1.task_statuses.record(initial_status)
     # 第二步：创建 run_command Decision，执行当前 Python 输出固定标记。
     decision = RunCommandToolCallDecision(
         action_type="tool_call",
@@ -72,6 +80,14 @@ def test_sqlite_state_survives_wait_approve_execute_restarts(
         requests=state_1.permission_requests,
         next_permission_request_id=lambda: "permission-persistent-001",
     )
+    waiting_status = TaskStatusRecord(
+        task_status_id="status-persistent-002",
+        task_id=task.task_id,
+        revision=2,
+        status=TaskStatus.WAITING_USER,
+        reason="等待用户批准真实命令",
+    )
+    state_1.task_statuses.record(waiting_status)
 
     with pytest.raises(KeyError):
         state_1.observations.get(action.action_id)
@@ -88,6 +104,7 @@ def test_sqlite_state_survives_wait_approve_execute_restarts(
     assert restored_action is not action
     assert restored_pending == pending
     assert restored_pending is not pending
+    assert state_2.task_statuses.get_current(task.task_id) == waiting_status
 
     # 第六步：使用恢复后的 pending 记录用户 approve 决定。
     user_decision = PermissionDecisionRecord(
@@ -114,6 +131,14 @@ def test_sqlite_state_survives_wait_approve_execute_restarts(
     assert resumed_action == action
     assert resumed_action is not action
     assert allowed.outcome is PermissionCheckOutcome.ALLOWED
+    resumed_status = TaskStatusRecord(
+        task_status_id="status-persistent-003",
+        task_id=task.task_id,
+        revision=3,
+        status=TaskStatus.RUNNING,
+        reason="用户批准后恢复执行",
+    )
+    state_3.task_statuses.record(resumed_status)
 
     # 第八步：使用恢复后的 Action 执行真实命令；allowed_programs 中
     # python 映射到 Path(sys.executable).resolve()，Observation 写入 SQLite。
@@ -143,6 +168,7 @@ def test_sqlite_state_survives_wait_approve_execute_restarts(
 
     assert state_4.actions.get(action.action_id) == action
     assert state_4.tasks.get(task.task_id) == task
+    assert state_4.task_statuses.get_current(task.task_id) == resumed_status
     assert (
         state_4.permission_requests.get(pending.permission_request_id)
         == pending

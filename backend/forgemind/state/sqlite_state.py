@@ -15,6 +15,9 @@ from forgemind.state.sqlite_permission_request_registry import (
     SQLitePermissionRequestRegistry,
 )
 from forgemind.state.sqlite_task_registry import SQLiteTaskRegistry
+from forgemind.state.sqlite_task_status_registry import (
+    SQLiteTaskStatusRegistry,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -23,6 +26,7 @@ class SQLiteForgeMindState:
 
     database_path: Path
     tasks: SQLiteTaskRegistry
+    task_statuses: SQLiteTaskStatusRegistry
     actions: SQLiteActionRegistry
     permission_requests: SQLitePermissionRequestRegistry
     permission_decisions: SQLitePermissionDecisionRegistry
@@ -37,6 +41,7 @@ class SQLiteForgeMindState:
         # 第二步：先创建 Task Registry，再创建 Action Registry；后续会让
         # 每个 Action 的 task_id 引用已经持久化的任务。
         tasks = SQLiteTaskRegistry(resolved_database_path)
+        task_statuses = SQLiteTaskStatusRegistry(resolved_database_path)
         actions = SQLiteActionRegistry(resolved_database_path)
         # 第三步：创建 PermissionRequest Registry，并传入 Action Registry。
         permission_requests = SQLitePermissionRequestRegistry(
@@ -57,6 +62,7 @@ class SQLiteForgeMindState:
         return cls(
             database_path=resolved_database_path,
             tasks=tasks,
+            task_statuses=task_statuses,
             actions=actions,
             permission_requests=permission_requests,
             permission_decisions=permission_decisions,

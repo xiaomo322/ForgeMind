@@ -13,6 +13,9 @@ from forgemind.state.sqlite_permission_request_registry import (
 )
 from forgemind.state.sqlite_state import SQLiteForgeMindState
 from forgemind.state.sqlite_task_registry import SQLiteTaskRegistry
+from forgemind.state.sqlite_task_status_registry import (
+    SQLiteTaskStatusRegistry,
+)
 
 
 def test_open_builds_complete_state_for_one_database(tmp_path: Path) -> None:
@@ -25,6 +28,7 @@ def test_open_builds_complete_state_for_one_database(tmp_path: Path) -> None:
     assert state.database_path == database_path.resolve()
     assert database_path.is_file()
     assert isinstance(state.tasks, SQLiteTaskRegistry)
+    assert isinstance(state.task_statuses, SQLiteTaskStatusRegistry)
     assert isinstance(state.actions, SQLiteActionRegistry)
     assert isinstance(
         state.permission_requests,
@@ -57,6 +61,7 @@ def test_reopen_builds_fresh_registry_objects(tmp_path: Path) -> None:
     assert reopened.database_path == first.database_path
     assert reopened is not first
     assert reopened.tasks is not first.tasks
+    assert reopened.task_statuses is not first.task_statuses
     assert reopened.actions is not first.actions
     assert reopened.permission_requests is not first.permission_requests
     assert reopened.permission_decisions is not first.permission_decisions
