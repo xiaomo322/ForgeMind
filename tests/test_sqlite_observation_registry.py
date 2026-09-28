@@ -132,6 +132,22 @@ def test_second_terminal_observation_does_not_overwrite(
     assert observations.get(action.action_id) == first
 
 
+def test_optional_observation_distinguishes_missing_from_existing(
+    tmp_path: Path,
+) -> None:
+    database_path = tmp_path / "state.db"
+    actions, observations = _registries(database_path)
+    action = _action()
+    observation = _success(action.action_id)
+    actions.register(action)
+
+    assert observations.get_optional(action.action_id) is None
+
+    observations.record(observation)
+
+    assert observations.get_optional(action.action_id) == observation
+
+
 def test_corrupt_observation_status_is_rejected(tmp_path: Path) -> None:
     database_path = tmp_path / "state.db"
     actions, observations = _registries(database_path)
@@ -147,4 +163,4 @@ def test_corrupt_observation_status_is_rejected(tmp_path: Path) -> None:
         )
 
     with pytest.raises(CorruptStoredObservationError):
-        observations.get(action.action_id)
+        observations.get_optional(action.action_id)

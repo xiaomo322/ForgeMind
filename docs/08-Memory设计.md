@@ -46,6 +46,8 @@ SQLiteTaskStatusRegistry 以 task_id/revision 唯一组合保存完整历史，�
 
 TaskStateView 已能一次返回不可变任务来源、当前状态和有序 Action 历史，并检查状态与所有 Action 属于同一 task_id。Action 序号必须从 1 连续递增；空元组表示已查询但尚无 Action，字段缺失会被严格契约拒绝。
 
+每条 ActionStateView 同时保存 sequence、AcceptedAction 和可选 TerminalObservation。Observation 缺失是明确的“尚无终态”，已存在但损坏的记录不能被可选查询隐藏。Action 与 Observation 通过 action_id 校验配对，不依赖两个列表的相同下标。
+
 Action、Observation 和权限记录通过 `task_id`、`action_id`、`permission_request_id` 与 `permission_decision_id` 建立明确关联。Registry 采用追加式规则，已有事实不能被同编号的新对象覆盖。
 
 ## 3. 规划中的任务 State

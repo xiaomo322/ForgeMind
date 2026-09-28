@@ -6,8 +6,9 @@ from typing import Self
 
 from pydantic import Field, field_validator, model_validator
 
-from forgemind.schema.actions import SequencedActionRecord
+from forgemind.schema.actions import AcceptedToolAction
 from forgemind.schema.base import StrictContractModel
+from forgemind.schema.observations import TerminalObservation
 
 
 class TaskRecord(StrictContractModel):
@@ -63,6 +64,30 @@ class TaskStatusRecord(StrictContractModel):
     reason: str = Field(min_length=1)
 
 
+class ActionStateView(StrictContractModel):
+    """一条有序 AcceptedAction 及其可能尚不存在的终态结果。"""
+
+    sequence: int = Field(ge=1)
+    action: AcceptedToolAction
+    observation: TerminalObservation | None
+
+    @model_validator(mode="after")
+    def require_matching_observation(self) -> Self:
+        """存在 Observation 时，它必须属于这一条 Action。"""
+
+        # 第一步：判断 self.observation 是否不为 None。
+        # 第二步：仅在 Observation 存在时，比较它的 action_id 与
+        # self.action.action_id。
+        if (
+            self.observation is not None
+            and self.observation.action_id != self.action.action_id
+        ):
+            # 第三步：编号不相同时抛出 ValueError。
+            raise ValueError("Observation 不属于对应的 Action")
+        # 第四步：没有 Observation 或编号一致时返回 self。
+        return self
+
+
 class TaskStateView(StrictContractModel):
     """提供给 Runtime/Context Builder 的任务来源与当前生命周期视图。"""
 
@@ -70,7 +95,7 @@ class TaskStateView(StrictContractModel):
     current_status: TaskStatusRecord
     # 这个字段故意不提供默认值：State 构建视图时必须明确说明已经查询
     # Action 历史；没有 Action 应传入空元组，而不是遗漏字段。
-    actions: tuple[SequencedActionRecord, ...]
+    actions: tuple[ActionStateView, ...]
 
     @model_validator(mode="after")
     def require_same_task(self) -> Self:
@@ -82,17 +107,17 @@ class TaskStateView(StrictContractModel):
 
         # 第二步：使用 enumerate(self.actions, start=1) 同时取得
         # expected_sequence 和 action_record。
-        for expected_sequence, action_record in enumerate(
+        for expected_sequence, action_state in enumerate(
             self.actions,
             start=1,
         ):
-            # 第三步：检查 action_record.action.task_id 是否等于
+            # 第三步：检查 action_state.action.task_id 是否等于
             # self.task.task_id；不同就抛出 ValueError。
-            if action_record.action.task_id != self.task.task_id:
+            if action_state.action.task_id != self.task.task_id:
                 raise ValueError("Action 不属于视图中的任务")
-            # 第四步：检查 action_record.sequence 是否等于 expected_sequence；
+            # 第四步：检查 action_state.sequence 是否等于 expected_sequence；
             # 不同就抛出 ValueError。
-            if action_record.sequence != expected_sequence:
+            if action_state.sequence != expected_sequence:
                 raise ValueError("Action 序号必须从 1 开始连续递增")
         # 第五步：全部检查通过后返回 self。
         return self

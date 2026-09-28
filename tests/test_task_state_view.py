@@ -5,10 +5,15 @@ from pydantic import ValidationError
 
 from forgemind.schema.actions import (
     AcceptedReadFileToolAction,
-    SequencedActionRecord,
+)
+from forgemind.schema.observations import (
+    ObservationError,
+    ObservationErrorCode,
+    RejectedObservation,
 )
 from forgemind.schema.read_file import ReadFileArguments
 from forgemind.schema.tasks import (
+    ActionStateView,
     TaskRecord,
     TaskStateView,
     TaskStatus,
@@ -53,6 +58,17 @@ def _action(
     )
 
 
+def _rejected(action_id: str) -> RejectedObservation:
+    return RejectedObservation(
+        action_id=action_id,
+        status="rejected",
+        error=ObservationError(
+            code=ObservationErrorCode.PERMISSION_DENIED,
+            message="用户拒绝执行",
+        ),
+    )
+
+
 def test_task_state_view_rejects_status_from_another_task(
     tmp_path: Path,
 ) -> None:
@@ -72,9 +88,10 @@ def test_task_state_view_rejects_action_from_another_task(
             task=_task(tmp_path, "task-001"),
             current_status=_initial("task-001"),
             actions=(
-                SequencedActionRecord(
+                ActionStateView(
                     sequence=1,
                     action=_action("action-001", "task-other"),
+                    observation=None,
                 ),
             ),
         )
@@ -88,11 +105,21 @@ def test_task_state_view_rejects_non_continuous_action_sequence(
             task=_task(tmp_path),
             current_status=_initial(),
             actions=(
-                SequencedActionRecord(
+                ActionStateView(
                     sequence=2,
                     action=_action("action-002"),
+                    observation=None,
                 ),
             ),
+        )
+
+
+def test_action_state_view_rejects_observation_for_another_action() -> None:
+    with pytest.raises(ValidationError):
+        ActionStateView(
+            sequence=1,
+            action=_action("action-001"),
+            observation=_rejected("action-other"),
         )
 
 
@@ -135,12 +162,22 @@ def test_state_view_restores_actions_in_registration_order(
     second_action = _action("a-first-lexically")
     first.actions.register(first_action)
     first.actions.register(second_action)
+    second_observation = _rejected(second_action.action_id)
+    first.observations.record(second_observation)
 
     restored = SQLiteForgeMindState.open(database_path).get_task_view(
         "task-001"
     )
 
     assert restored.actions == (
-        SequencedActionRecord(sequence=1, action=first_action),
-        SequencedActionRecord(sequence=2, action=second_action),
+        ActionStateView(
+            sequence=1,
+            action=first_action,
+            observation=None,
+        ),
+        ActionStateView(
+            sequence=2,
+            action=second_action,
+            observation=second_observation,
+        ),
     )

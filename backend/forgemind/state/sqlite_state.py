@@ -6,6 +6,7 @@ import sqlite3
 from typing import Self
 
 from forgemind.schema.tasks import (
+    ActionStateView,
     TaskRecord,
     TaskStateView,
     TaskStatus,
@@ -58,13 +59,24 @@ class SQLiteForgeMindState:
     def get_task_view(self, task_id: str) -> TaskStateView:
         """组合不可变任务来源、当前状态和有序 Action 历史。"""
 
+        action_records = self.actions.list_for_task(task_id)
+
         return TaskStateView(
             task=self.tasks.get(task_id),
             current_status=self.task_statuses.get_current(task_id),
-            # 第一步：调用 self.actions.list_for_task(task_id)，把返回的
-            # 有序元组传给 actions。不要直接查询 SQLite，也不要按
-            # action_id 再次排序。
-            actions=self.actions.list_for_task(task_id),
+            actions=tuple(
+                ActionStateView(
+                    sequence=record.sequence,
+                    action=record.action,
+                    # 第一步：用 record.action.action_id 调用
+                    # self.observations.get_optional(...)，把返回值传给
+                    # observation。这里的 None 表示尚无终态。
+                    observation=self.observations.get_optional(
+                        record.action.action_id
+                    ),
+                )
+                for record in action_records
+            ),
         )
 
     def create_task(

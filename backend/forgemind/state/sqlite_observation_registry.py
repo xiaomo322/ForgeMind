@@ -129,3 +129,15 @@ class SQLiteObservationRegistry:
             raise CorruptStoredObservationError(action_id)
 
         return observation
+
+    def get_optional(self, action_id: str) -> TerminalObservation | None:
+        """恢复终态；尚未产生终态时返回 None。"""
+
+        # 第一步：在 try 中调用 self.get(action_id) 并直接返回结果。
+        # 第二步：只捕获 KeyError，然后返回 None。不要捕获
+        # CorruptStoredObservationError 或 Exception；磁盘中存在但已经
+        # 损坏的记录必须继续暴露为错误。
+        try:
+            return self.get(action_id)
+        except KeyError:
+            return None
