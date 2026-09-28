@@ -11,6 +11,11 @@ from forgemind.schema.observations import (
     ObservationErrorCode,
     RejectedObservation,
 )
+from forgemind.schema.permissions import (
+    PendingReadFilePermissionRequest,
+    PermissionDecision,
+    PermissionDecisionRecord,
+)
 from forgemind.schema.read_file import ReadFileArguments
 from forgemind.schema.tasks import (
     ActionStateView,
@@ -53,6 +58,7 @@ def _action(
             path=f"{action_id}.py",
             start_line=1,
             max_lines=20,
+            expected_version="sha256:test-version",
         ),
         reason=f"读取 {action_id}",
     )
@@ -66,6 +72,36 @@ def _rejected(action_id: str) -> RejectedObservation:
             code=ObservationErrorCode.PERMISSION_DENIED,
             message="用户拒绝执行",
         ),
+    )
+
+
+def _permission_request(
+    action: AcceptedReadFileToolAction,
+) -> PendingReadFilePermissionRequest:
+    return PendingReadFilePermissionRequest(
+        permission_request_id=f"permission-{action.action_id}",
+        task_id=action.task_id,
+        action_id=action.action_id,
+        status="pending",
+        action_type=action.action_type,
+        tool_name=action.tool_name,
+        arguments=action.arguments,
+        reason="读取范围需要用户确认",
+        basis_ids=("policy-read-001",),
+    )
+
+
+def _permission_decision(
+    request: PendingReadFilePermissionRequest,
+) -> PermissionDecisionRecord:
+    return PermissionDecisionRecord(
+        permission_decision_id=f"decision-{request.action_id}",
+        permission_request_id=request.permission_request_id,
+        task_id=request.task_id,
+        action_id=request.action_id,
+        decision=PermissionDecision.REJECT,
+        source="user",
+        raw_response="拒绝",
     )
 
 
@@ -91,6 +127,8 @@ def test_task_state_view_rejects_action_from_another_task(
                 ActionStateView(
                     sequence=1,
                     action=_action("action-001", "task-other"),
+                    permission_request=None,
+                    permission_decision=None,
                     observation=None,
                 ),
             ),
@@ -108,6 +146,8 @@ def test_task_state_view_rejects_non_continuous_action_sequence(
                 ActionStateView(
                     sequence=2,
                     action=_action("action-002"),
+                    permission_request=None,
+                    permission_decision=None,
                     observation=None,
                 ),
             ),
@@ -119,7 +159,52 @@ def test_action_state_view_rejects_observation_for_another_action() -> None:
         ActionStateView(
             sequence=1,
             action=_action("action-001"),
+            permission_request=None,
+            permission_decision=None,
             observation=_rejected("action-other"),
+        )
+
+
+def test_action_state_view_rejects_request_for_another_action() -> None:
+    action = _action("action-001")
+    other_request = _permission_request(_action("action-other"))
+
+    with pytest.raises(ValidationError):
+        ActionStateView(
+            sequence=1,
+            action=action,
+            permission_request=other_request,
+            permission_decision=None,
+            observation=None,
+        )
+
+
+def test_action_state_view_rejects_decision_without_request() -> None:
+    action = _action("action-001")
+    request = _permission_request(action)
+
+    with pytest.raises(ValidationError):
+        ActionStateView(
+            sequence=1,
+            action=action,
+            permission_request=None,
+            permission_decision=_permission_decision(request),
+            observation=None,
+        )
+
+
+def test_action_state_view_rejects_decision_for_another_request() -> None:
+    action = _action("action-001")
+    request = _permission_request(action)
+    other_request = _permission_request(_action("action-other"))
+
+    with pytest.raises(ValidationError):
+        ActionStateView(
+            sequence=1,
+            action=action,
+            permission_request=request,
+            permission_decision=_permission_decision(other_request),
+            observation=None,
         )
 
 
@@ -162,6 +247,10 @@ def test_state_view_restores_actions_in_registration_order(
     second_action = _action("a-first-lexically")
     first.actions.register(first_action)
     first.actions.register(second_action)
+    second_request = _permission_request(second_action)
+    first.permission_requests.register(second_request)
+    second_decision = _permission_decision(second_request)
+    first.permission_decisions.record(second_decision)
     second_observation = _rejected(second_action.action_id)
     first.observations.record(second_observation)
 
@@ -173,11 +262,15 @@ def test_state_view_restores_actions_in_registration_order(
         ActionStateView(
             sequence=1,
             action=first_action,
+            permission_request=None,
+            permission_decision=None,
             observation=None,
         ),
         ActionStateView(
             sequence=2,
             action=second_action,
+            permission_request=second_request,
+            permission_decision=second_decision,
             observation=second_observation,
         ),
     )

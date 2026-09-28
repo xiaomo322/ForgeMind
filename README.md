@@ -72,7 +72,7 @@ docs/         # 01–16 正式设计文档和开发日志
 - `SQLiteTaskStatusRegistry` 持久化连续状态历史，并已接入统一 State 和跨重启流程。
 - `SQLiteForgeMindState.create_task()` 在一个事务中原子写入任务及初始 RUNNING 状态。
 - Runtime 状态推进入口从当前权威记录分配下一 revision，登记成功后才返回新状态。
-- `TaskStateView` 聚合任务来源、当前状态和有序 Action 历史；每条 Action 同时携带匹配的终态 Observation 或明确的 `None`。
+- `TaskStateView` 聚合任务来源、当前状态和有序 Action 历史；每条 Action 同时携带权限请求、用户决定及终态 Observation，尚不存在的阶段明确为 `None`。
 - 权限请求以 Action 为唯一范围：同一 AcceptedAction 最多询问一次，并可按 action_id 严格恢复或明确返回 `None`。
 - State 为每个任务内的 Action 分配独立连续序号，恢复历史时按照登记顺序返回，不从随机 `action_id` 推断先后。
 
@@ -80,6 +80,6 @@ docs/         # 01–16 正式设计文档和开发日志
 
 ## 当前学习进度
 
-当前学习 `06-数据结构设计`（更新于 2026-09-28）。五个 Tool V0.1 均已形成完整证据链；任务来源、连续生命周期、Action、权限和 Observation 已由 `SQLiteForgeMindState` 统一组合并可跨重启恢复。权限请求现已建立“一 Action 一请求”约束和按 Action 查询，下一步把权限请求与用户决定加入 `ActionStateView`。当前完整测试 401 项通过。详细设计演进见 `docs/06-数据结构设计.md`，逐步开发记录见 `docs/16-项目开发日志.md`。
+当前学习 `06-数据结构设计`（更新于 2026-09-28）。五个 Tool V0.1 均已形成完整证据链；`TaskStateView` 现已聚合任务来源、当前状态，以及按序 Action 的权限请求、用户决定和终态 Observation。下一步由学习者编写完整任务视图的跨重启模块测试。当前完整测试 405 项通过。详细设计演进见 `docs/06-数据结构设计.md`，逐步开发记录见 `docs/16-项目开发日志.md`。
 
 每个切片只处理一个主要概念，并明确留出核心代码由用户先写；AI 提供脚手架、测试和基于真实错误的 Debug 支持。

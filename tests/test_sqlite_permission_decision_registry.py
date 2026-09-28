@@ -176,6 +176,26 @@ def test_second_decision_for_same_request_is_rejected(tmp_path: Path) -> None:
     assert decisions.get_for_request(request.permission_request_id) == original
 
 
+def test_optional_decision_distinguishes_waiting_from_answered(
+    tmp_path: Path,
+) -> None:
+    database_path = tmp_path / "state.db"
+    _, request, _, decisions = _persist_request(database_path)
+    decision = _decision(request)
+
+    assert (
+        decisions.get_optional_for_request(request.permission_request_id)
+        is None
+    )
+
+    decisions.record(decision)
+
+    assert (
+        decisions.get_optional_for_request(request.permission_request_id)
+        == decision
+    )
+
+
 def test_corrupt_permission_decision_columns_are_rejected(
     tmp_path: Path,
 ) -> None:
@@ -195,4 +215,4 @@ def test_corrupt_permission_decision_columns_are_rejected(
         )
 
     with pytest.raises(CorruptStoredPermissionDecisionError):
-        decisions.get(decision.permission_decision_id)
+        decisions.get_optional_for_request(request.permission_request_id)

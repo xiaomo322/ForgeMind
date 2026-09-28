@@ -60,23 +60,47 @@ class SQLiteForgeMindState:
         """组合不可变任务来源、当前状态和有序 Action 历史。"""
 
         action_records = self.actions.list_for_task(task_id)
+        action_states: list[ActionStateView] = []
 
-        return TaskStateView(
-            task=self.tasks.get(task_id),
-            current_status=self.task_statuses.get_current(task_id),
-            actions=tuple(
+        for record in action_records:
+            # 第一步：使用 record.action.action_id 调用
+            # self.permission_requests.get_optional_for_action(...)，保存为
+            # permission_request。
+            permission_request = (
+                self.permission_requests.get_optional_for_action(
+                    record.action.action_id
+                )
+            )
+            # 第二步：如果 permission_request 为 None，
+            # permission_decision 也设为 None；否则使用请求编号调用
+            # self.permission_decisions.get_optional_for_request(...)。
+            if permission_request is None:
+                permission_decision = None
+            else:
+                permission_decision = (
+                    self.permission_decisions.get_optional_for_request(
+                        permission_request.permission_request_id
+                    )
+                )
+            # 第三步：构造 ActionStateView，把 sequence、action、权限请求、
+            # 权限决定和按 action_id 查询的 Observation 全部传入，再追加到
+            # action_states。
+            action_states.append(
                 ActionStateView(
                     sequence=record.sequence,
                     action=record.action,
-                    # 第一步：用 record.action.action_id 调用
-                    # self.observations.get_optional(...)，把返回值传给
-                    # observation。这里的 None 表示尚无终态。
+                    permission_request=permission_request,
+                    permission_decision=permission_decision,
                     observation=self.observations.get_optional(
                         record.action.action_id
                     ),
                 )
-                for record in action_records
-            ),
+            )
+
+        return TaskStateView(
+            task=self.tasks.get(task_id),
+            current_status=self.task_statuses.get_current(task_id),
+            actions=tuple(action_states),
         )
 
     def create_task(

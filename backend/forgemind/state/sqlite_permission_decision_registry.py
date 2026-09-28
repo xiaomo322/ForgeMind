@@ -197,3 +197,17 @@ class SQLitePermissionDecisionRegistry:
         if row is None:
             raise KeyError(permission_request_id)
         return self.get(row[0])
+
+    def get_optional_for_request(
+        self,
+        permission_request_id: str,
+    ) -> PermissionDecisionRecord | None:
+        """用户尚未回答时返回 None，损坏记录仍然抛错。"""
+
+        # 第一步：在 try 中调用并返回
+        # self.get_for_request(permission_request_id)。
+        try:
+            return self.get_for_request(permission_request_id)
+        # 第二步：只捕获 KeyError 并返回 None。
+        except KeyError:
+            return None

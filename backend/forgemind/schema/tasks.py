@@ -9,6 +9,10 @@ from pydantic import Field, field_validator, model_validator
 from forgemind.schema.actions import AcceptedToolAction
 from forgemind.schema.base import StrictContractModel
 from forgemind.schema.observations import TerminalObservation
+from forgemind.schema.permissions import (
+    PendingPermissionRequest,
+    PermissionDecisionRecord,
+)
 
 
 class TaskRecord(StrictContractModel):
@@ -69,22 +73,64 @@ class ActionStateView(StrictContractModel):
 
     sequence: int = Field(ge=1)
     action: AcceptedToolAction
+    permission_request: PendingPermissionRequest | None
+    permission_decision: PermissionDecisionRecord | None
     observation: TerminalObservation | None
 
     @model_validator(mode="after")
     def require_matching_observation(self) -> Self:
-        """存在 Observation 时，它必须属于这一条 Action。"""
+        """权限链和 Observation 必须属于这一条 Action。"""
 
-        # 第一步：判断 self.observation 是否不为 None。
-        # 第二步：仅在 Observation 存在时，比较它的 action_id 与
+        # 第一步：如果 permission_request 不为 None，检查它的 task_id、
+        # action_id、action_type、tool_name 和 arguments 是否分别等于
+        # self.action 中的对应字段；任一不同就抛出
+        # ValueError("权限请求不属于对应的 Action")。
+        if self.permission_request is not None:
+            if (
+                self.permission_request.task_id != self.action.task_id
+                or self.permission_request.action_id
+                != self.action.action_id
+                or self.permission_request.action_type
+                != self.action.action_type
+                or self.permission_request.tool_name
+                != self.action.tool_name
+                or self.permission_request.arguments
+                != self.action.arguments
+            ):
+                raise ValueError("权限请求不属于对应的 Action")
+        # 第二步：如果 permission_decision 不为 None，但
+        # permission_request 为 None，抛出
+        # ValueError("权限决定缺少对应的权限请求")。
+        if (
+            self.permission_decision is not None
+            and self.permission_request is None
+        ):
+            raise ValueError("权限决定缺少对应的权限请求")
+        # 第三步：如果两者都存在，检查决定的 permission_request_id、
+        # task_id、action_id 是否与请求及 Action 一致；任一不同就抛出
+        # ValueError("权限决定不属于对应的权限请求")。
+        if (
+            self.permission_decision is not None
+            and self.permission_request is not None
+            and (
+                self.permission_decision.permission_request_id
+                != self.permission_request.permission_request_id
+                or self.permission_decision.task_id != self.action.task_id
+                or self.permission_decision.action_id
+                != self.action.action_id
+            )
+        ):
+            raise ValueError("权限决定不属于对应的权限请求")
+        # 第四步：判断 self.observation 是否不为 None。
+        # 第五步：仅在 Observation 存在时，比较它的 action_id 与
         # self.action.action_id。
         if (
             self.observation is not None
             and self.observation.action_id != self.action.action_id
         ):
-            # 第三步：编号不相同时抛出 ValueError。
+            # 第六步：编号不相同时抛出 ValueError。
             raise ValueError("Observation 不属于对应的 Action")
-        # 第四步：没有 Observation 或编号一致时返回 self。
+        # 第七步：全部检查通过后返回 self。
         return self
 
 

@@ -50,6 +50,8 @@ TaskStateView 已能一次返回不可变任务来源、当前状态和有序 Ac
 
 每个 AcceptedAction 最多对应一个权限请求。内存和 SQLite State 都建立 action_id 唯一索引；按 Action 查询复用按请求编号的严格恢复逻辑，不存在返回 None，损坏记录继续抛错。范围变化需要形成新 Action，不能对同一 Action 重复询问。
 
+ActionStateView 现把请求和用户决定直接放在对应 Action 内。无 Request 时 Decision 必须为 None；有 Request 无 Decision 表示仍在等待用户；Decision 必须同时匹配 request_id、task_id 和 action_id。统一 State 只在 Request 存在时查询它的 Decision，避免虚构查询编号。
+
 Action、Observation 和权限记录通过 `task_id`、`action_id`、`permission_request_id` 与 `permission_decision_id` 建立明确关联。Registry 采用追加式规则，已有事实不能被同编号的新对象覆盖。
 
 ## 3. 规划中的任务 State
