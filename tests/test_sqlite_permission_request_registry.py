@@ -8,6 +8,7 @@ from forgemind.schema.permissions import PendingRunCommandPermissionRequest
 from forgemind.schema.run_command import RunCommandArguments
 from forgemind.schema.tasks import TaskRecord
 from forgemind.state.permission_request_registry import (
+    DuplicateActionPermissionRequestError,
     DuplicatePermissionRequestIdError,
     PermissionRequestActionSnapshotMismatchError,
     UnknownPermissionRequestActionError,
@@ -135,6 +136,43 @@ def test_duplicate_permission_request_does_not_overwrite(
         requests.register(conflicting)
 
     assert requests.get(original.permission_request_id) == original
+
+
+def test_action_cannot_have_second_permission_request(
+    tmp_path: Path,
+) -> None:
+    database_path = tmp_path / "state.db"
+    actions, requests = _registries(database_path)
+    action = _action()
+    original = _request(action)
+    actions.register(action)
+    requests.register(original)
+
+    with pytest.raises(DuplicateActionPermissionRequestError):
+        requests.register(
+            _request(
+                action,
+                permission_request_id="permission-command-002",
+            )
+        )
+
+    assert requests.get_for_action(action.action_id) == original
+
+
+def test_optional_request_for_action_distinguishes_missing_from_existing(
+    tmp_path: Path,
+) -> None:
+    database_path = tmp_path / "state.db"
+    actions, requests = _registries(database_path)
+    action = _action()
+    request = _request(action)
+    actions.register(action)
+
+    assert requests.get_optional_for_action(action.action_id) is None
+
+    requests.register(request)
+
+    assert requests.get_optional_for_action(action.action_id) == request
 
 
 def test_permission_registry_requires_same_database(tmp_path: Path) -> None:

@@ -143,7 +143,11 @@ def test_duplicate_decision_id_does_not_overwrite(tmp_path: Path) -> None:
     action, request, requests, decisions = _persist_request(database_path)
     original = _decision(request)
     decisions.record(original)
-    second_request = _request(action, "permission-command-002")
+    second_action = action.model_copy(
+        update={"action_id": "action-command-002"}
+    )
+    SQLiteActionRegistry(database_path).register(second_action)
+    second_request = _request(second_action, "permission-command-002")
     requests.register(second_request)
 
     with pytest.raises(DuplicatePermissionDecisionIdError):

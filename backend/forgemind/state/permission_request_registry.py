@@ -12,6 +12,14 @@ class DuplicatePermissionRequestIdError(ValueError):
     """permission_request_id 已经指向另一条询问记录。"""
 
 
+class DuplicateActionPermissionRequestError(ValueError):
+    """同一不可变 Action 已经存在权限请求。"""
+
+    def __init__(self, action_id: str) -> None:
+        self.action_id = action_id
+        super().__init__(f"Action 已存在权限请求：{action_id}")
+
+
 class PermissionRequestActionSnapshotMismatchError(ValueError):
     """待确认请求保存的操作快照与权威 Action 不一致。"""
 
@@ -22,6 +30,7 @@ class InMemoryPermissionRequestRegistry:
     def __init__(self, actions: InMemoryActionRegistry) -> None:
         self._actions = actions
         self._requests: dict[str, PendingPermissionRequest] = {}
+        self._by_action_id: dict[str, PendingPermissionRequest] = {}
 
     def register(self, request: PendingPermissionRequest) -> None:
         """登记请求；未知 Action、快照变化或重复编号都明确失败。"""
@@ -45,10 +54,18 @@ class InMemoryPermissionRequestRegistry:
         # 注册表只追加新事实，绝不覆盖已经展示给用户的原始询问。
         if request.permission_request_id in self._requests:
             raise DuplicatePermissionRequestIdError(request.permission_request_id)
+        if request.action_id in self._by_action_id:
+            raise DuplicateActionPermissionRequestError(request.action_id)
 
         self._requests[request.permission_request_id] = request
+        self._by_action_id[request.action_id] = request
 
     def get(self, permission_request_id: str) -> PendingPermissionRequest:
         """按询问编号取得待确认请求。"""
 
         return self._requests[permission_request_id]
+
+    def get_for_action(self, action_id: str) -> PendingPermissionRequest:
+        """取得一条 Action 唯一的权限请求。"""
+
+        return self._by_action_id[action_id]

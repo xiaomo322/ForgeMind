@@ -13,6 +13,7 @@ from forgemind.schema.permissions import (
 )
 from forgemind.state.action_registry import InMemoryActionRegistry
 from forgemind.state.permission_request_registry import (
+    DuplicateActionPermissionRequestError,
     DuplicatePermissionRequestIdError,
     InMemoryPermissionRequestRegistry,
     PermissionRequestActionSnapshotMismatchError,
@@ -130,6 +131,34 @@ def test_permission_request_registry_rejects_duplicate_id_without_overwrite() ->
         requests.register(duplicate)
 
     assert requests.get("permission-request-001") is original
+
+
+def test_permission_request_registry_rejects_second_request_for_action() -> None:
+    actions = InMemoryActionRegistry()
+    action = make_action()
+    actions.register(action)
+    requests = InMemoryPermissionRequestRegistry(actions)
+    original = PendingReadFilePermissionRequest(
+        permission_request_id="permission-request-001",
+        task_id=action.task_id,
+        action_id=action.action_id,
+        status="pending",
+        action_type="tool_call",
+        tool_name="read_file",
+        arguments=action.arguments,
+        reason="第一次询问",
+        basis_ids=("permission-policy-001",),
+    )
+    second = original.model_copy(
+        update={"permission_request_id": "permission-request-002"}
+    )
+
+    requests.register(original)
+
+    with pytest.raises(DuplicateActionPermissionRequestError):
+        requests.register(second)
+
+    assert requests.get_for_action(action.action_id) is original
 
 
 def test_permission_request_registry_rejects_unknown_action() -> None:
