@@ -56,11 +56,15 @@ class SQLiteForgeMindState:
     observations: SQLiteObservationRegistry
 
     def get_task_view(self, task_id: str) -> TaskStateView:
-        """组合不可变任务来源和当前最高 revision 状态。"""
+        """组合不可变任务来源、当前状态和有序 Action 历史。"""
 
         return TaskStateView(
             task=self.tasks.get(task_id),
             current_status=self.task_statuses.get_current(task_id),
+            # 第一步：调用 self.actions.list_for_task(task_id)，把返回的
+            # 有序元组传给 actions。不要直接查询 SQLite，也不要按
+            # action_id 再次排序。
+            actions=self.actions.list_for_task(task_id),
         )
 
     def create_task(

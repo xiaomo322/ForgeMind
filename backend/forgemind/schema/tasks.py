@@ -6,6 +6,7 @@ from typing import Self
 
 from pydantic import Field, field_validator, model_validator
 
+from forgemind.schema.actions import SequencedActionRecord
 from forgemind.schema.base import StrictContractModel
 
 
@@ -67,6 +68,9 @@ class TaskStateView(StrictContractModel):
 
     task: TaskRecord
     current_status: TaskStatusRecord
+    # 这个字段故意不提供默认值：State 构建视图时必须明确说明已经查询
+    # Action 历史；没有 Action 应传入空元组，而不是遗漏字段。
+    actions: tuple[SequencedActionRecord, ...]
 
     @model_validator(mode="after")
     def require_same_task(self) -> Self:
@@ -75,5 +79,20 @@ class TaskStateView(StrictContractModel):
         # 第一步：比较 self.current_status.task_id 与 self.task.task_id。
         if self.current_status.task_id != self.task.task_id:
             raise ValueError("当前状态不属于视图中的任务")
-        # 第二步：不一致时抛出 ValueError，一致时返回 self。
+
+        # 第二步：使用 enumerate(self.actions, start=1) 同时取得
+        # expected_sequence 和 action_record。
+        for expected_sequence, action_record in enumerate(
+            self.actions,
+            start=1,
+        ):
+            # 第三步：检查 action_record.action.task_id 是否等于
+            # self.task.task_id；不同就抛出 ValueError。
+            if action_record.action.task_id != self.task.task_id:
+                raise ValueError("Action 不属于视图中的任务")
+            # 第四步：检查 action_record.sequence 是否等于 expected_sequence；
+            # 不同就抛出 ValueError。
+            if action_record.sequence != expected_sequence:
+                raise ValueError("Action 序号必须从 1 开始连续递增")
+        # 第五步：全部检查通过后返回 self。
         return self
