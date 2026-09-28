@@ -5,7 +5,12 @@ from pathlib import Path
 import sqlite3
 from typing import Self
 
-from forgemind.schema.tasks import TaskRecord, TaskStatus, TaskStatusRecord
+from forgemind.schema.tasks import (
+    TaskRecord,
+    TaskStateView,
+    TaskStatus,
+    TaskStatusRecord,
+)
 from forgemind.state.sqlite_action_registry import SQLiteActionRegistry
 from forgemind.state.sqlite_observation_registry import (
     SQLiteObservationRegistry,
@@ -49,6 +54,14 @@ class SQLiteForgeMindState:
     permission_requests: SQLitePermissionRequestRegistry
     permission_decisions: SQLitePermissionDecisionRegistry
     observations: SQLiteObservationRegistry
+
+    def get_task_view(self, task_id: str) -> TaskStateView:
+        """组合不可变任务来源和当前最高 revision 状态。"""
+
+        return TaskStateView(
+            task=self.tasks.get(task_id),
+            current_status=self.task_statuses.get_current(task_id),
+        )
 
     def create_task(
         self,

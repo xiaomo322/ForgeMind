@@ -2,8 +2,9 @@
 
 from enum import StrEnum
 from pathlib import Path
+from typing import Self
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 
 from forgemind.schema.base import StrictContractModel
 
@@ -59,3 +60,20 @@ class TaskStatusRecord(StrictContractModel):
     revision: int = Field(ge=1)
     status: TaskStatus
     reason: str = Field(min_length=1)
+
+
+class TaskStateView(StrictContractModel):
+    """提供给 Runtime/Context Builder 的任务来源与当前生命周期视图。"""
+
+    task: TaskRecord
+    current_status: TaskStatusRecord
+
+    @model_validator(mode="after")
+    def require_same_task(self) -> Self:
+        """当前状态必须属于视图中的同一个任务。"""
+
+        # 第一步：比较 self.current_status.task_id 与 self.task.task_id。
+        if self.current_status.task_id != self.task.task_id:
+            raise ValueError("当前状态不属于视图中的任务")
+        # 第二步：不一致时抛出 ValueError，一致时返回 self。
+        return self

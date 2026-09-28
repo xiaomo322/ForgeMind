@@ -44,6 +44,8 @@ SQLiteTaskStatusRegistry 以 task_id/revision 唯一组合保存完整历史，�
 
 后续状态由 Runtime 从当前权威 revision 推导，调用方只表达目标状态和原因。新记录必须先写入 State 才能返回给 Agent，不能把尚未登记的临时对象作为事实。
 
+最小 TaskStateView 已能一次返回不可变任务来源与当前状态，并检查两者属于同一 task_id。Action 暂未汇入视图：在建立任务内序号前，随机 ID 排序不能作为真实时间顺序。
+
 Action、Observation 和权限记录通过 `task_id`、`action_id`、`permission_request_id` 与 `permission_decision_id` 建立明确关联。Registry 采用追加式规则，已有事实不能被同编号的新对象覆盖。
 
 ## 3. 规划中的任务 State
