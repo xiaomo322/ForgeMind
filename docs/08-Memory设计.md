@@ -42,6 +42,8 @@ SQLiteTaskStatusRegistry 以 task_id/revision 唯一组合保存完整历史，�
 
 任务创建通过 SQLiteForgeMindState 的单一事务同时写入 TaskRecord 与初始 RUNNING 状态。进程不能在两次独立提交之间留下“有任务、无状态”的不完整 State。
 
+后续状态由 Runtime 从当前权威 revision 推导，调用方只表达目标状态和原因。新记录必须先写入 State 才能返回给 Agent，不能把尚未登记的临时对象作为事实。
+
 Action、Observation 和权限记录通过 `task_id`、`action_id`、`permission_request_id` 与 `permission_decision_id` 建立明确关联。Registry 采用追加式规则，已有事实不能被同编号的新对象覆盖。
 
 ## 3. 规划中的任务 State

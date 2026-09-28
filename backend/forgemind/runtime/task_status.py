@@ -1,6 +1,9 @@
 """由 Runtime 执行确定性的任务状态转换检查。"""
 
-from forgemind.schema.tasks import TaskStatus
+from collections.abc import Callable
+from typing import Protocol
+
+from forgemind.schema.tasks import TaskStatus, TaskStatusRecord
 
 
 class InvalidTaskStatusTransitionError(ValueError):
@@ -55,3 +58,40 @@ def require_task_status_transition(
     if target not in allowed_targets:
         raise InvalidTaskStatusTransitionError(current, target)
     # 合法时不需要返回新状态；调用方继续创建 TaskStatusRecord。
+
+
+class TaskStatusRegistry(Protocol):
+    """Runtime 推进状态所需的最小 State 接口。"""
+
+    def get_current(self, task_id: str) -> TaskStatusRecord: ...
+
+    def record(self, status_record: TaskStatusRecord) -> None: ...
+
+
+def transition_task_status(
+    task_id: str,
+    target: TaskStatus,
+    reason: str,
+    *,
+    statuses: TaskStatusRegistry,
+    next_task_status_id: Callable[[], str],
+) -> TaskStatusRecord:
+    """从 State 当前版本构造、登记并返回下一条权威状态。"""
+
+    # 第一步：调用 statuses.get_current(task_id) 取得当前权威记录。
+    current = statuses.get_current(task_id)
+
+    # 第二步：构造 TaskStatusRecord：编号来自 next_task_status_id()，
+    # task_id/reason/target 来自参数，revision 为当前 revision + 1。
+    next_status = TaskStatusRecord(
+        task_status_id=next_task_status_id(),
+        task_id=task_id,
+        revision=current.revision + 1,
+        status=target,
+        reason=reason,
+    )
+
+    # 第三步：先调用 statuses.record(next_status)，成功后再返回它。
+    # Registry 会再次检查 revision 和状态转换，防止并发写入越过规则。
+    statuses.record(next_status)
+    return next_status

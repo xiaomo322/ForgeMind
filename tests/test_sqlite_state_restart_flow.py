@@ -11,6 +11,7 @@ from forgemind.runtime.permissions import (
     resolve_registered_permission_decision,
 )
 from forgemind.runtime.run_command_execution import execute_run_command_action
+from forgemind.runtime.task_status import transition_task_status
 from forgemind.schema.decisions import RunCommandToolCallDecision
 from forgemind.schema.permissions import (
     PermissionCheckOutcome,
@@ -79,14 +80,13 @@ def test_sqlite_state_survives_wait_approve_execute_restarts(
         requests=state_1.permission_requests,
         next_permission_request_id=lambda: "permission-persistent-001",
     )
-    waiting_status = TaskStatusRecord(
-        task_status_id="status-persistent-002",
-        task_id=task.task_id,
-        revision=2,
-        status=TaskStatus.WAITING_USER,
-        reason="等待用户批准真实命令",
+    waiting_status = transition_task_status(
+        task.task_id,
+        TaskStatus.WAITING_USER,
+        "等待用户批准真实命令",
+        statuses=state_1.task_statuses,
+        next_task_status_id=lambda: "status-persistent-002",
     )
-    state_1.task_statuses.record(waiting_status)
 
     with pytest.raises(KeyError):
         state_1.observations.get(action.action_id)
@@ -130,14 +130,13 @@ def test_sqlite_state_survives_wait_approve_execute_restarts(
     assert resumed_action == action
     assert resumed_action is not action
     assert allowed.outcome is PermissionCheckOutcome.ALLOWED
-    resumed_status = TaskStatusRecord(
-        task_status_id="status-persistent-003",
-        task_id=task.task_id,
-        revision=3,
-        status=TaskStatus.RUNNING,
-        reason="用户批准后恢复执行",
+    resumed_status = transition_task_status(
+        task.task_id,
+        TaskStatus.RUNNING,
+        "用户批准后恢复执行",
+        statuses=state_3.task_statuses,
+        next_task_status_id=lambda: "status-persistent-003",
     )
-    state_3.task_statuses.record(resumed_status)
 
     # 第八步：使用恢复后的 Action 执行真实命令；allowed_programs 中
     # python 映射到 Path(sys.executable).resolve()，Observation 写入 SQLite。
@@ -155,7 +154,7 @@ def test_sqlite_state_survives_wait_approve_execute_restarts(
     restored_observation = state_4.observations.get(action.action_id)
 
     # 第十步：断言 status=success、exit_code=0、stdout 含
-    # "forgemind-persistent-state-ok"，并确认四类记录都仍可读取。
+    # "forgemind-persistent-state-ok"，并确认完整证据链仍可读取。
     assert restored_observation == observation
     assert restored_observation is not observation
     assert restored_observation.status == "success"
@@ -176,5 +175,5 @@ def test_sqlite_state_survives_wait_approve_execute_restarts(
         state_4.permission_decisions.get(
             user_decision.permission_decision_id
         )
-            == user_decision
+        == user_decision
     )
