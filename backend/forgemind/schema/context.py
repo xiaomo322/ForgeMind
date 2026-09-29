@@ -1,6 +1,6 @@
 """提供给 Agent 单轮推理使用的严格、有限上下文契约。"""
 
-from typing import Self
+from typing import Literal, Self
 
 from pydantic import Field, model_validator
 
@@ -67,3 +67,11 @@ class AgentTaskContext(StrictContractModel):
             raise ValueError("保留的 Action 不是连续的最新后缀")
         # 第六步：全部通过后返回 self。
         return self
+
+
+class AgentContextEnvelope(StrictContractModel):
+    """为序列化后的 Agent Context 提供稳定类型和版本标识。"""
+
+    schema_version: Literal["0.1"] = "0.1"
+    context_type: Literal["task_context"] = "task_context"
+    context: AgentTaskContext
