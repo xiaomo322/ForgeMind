@@ -91,3 +91,16 @@ def parse_tool_call_decision_with_feedback(
         return AgentDecisionParseFailure(
             issues=tuple(map_validation_error(error))
         )
+
+
+def parse_agent_decision_with_feedback(
+    raw_response: str,
+) -> AgentDecision | AgentDecisionParseFailure:
+    """返回完整 AgentDecision，或返回稳定的全部校验问题。"""
+
+    try:
+        return parse_agent_decision(raw_response)
+    except ValidationError as error:
+        return AgentDecisionParseFailure(
+            issues=tuple(map_validation_error(error))
+        )

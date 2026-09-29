@@ -86,6 +86,6 @@ docs/         # 01–16 正式设计文档和开发日志
 
 ## 当前学习进度
 
-当前学习 Agent 推理边界（更新于 2026-09-29）。五个 Tool V0.1 均已形成完整证据链；Context Builder、消息构建、稳定解析反馈及包含 `ask_user` 的完整 Agent Decision 已经完成。下一步让完整 Agent Decision 共用解析失败反馈，再实现用户询问的 Runtime 接受与等待状态。当前完整测试 445 项通过。详细设计演进见 `docs/06-数据结构设计.md`，逐步开发记录见 `docs/16-项目开发日志.md`。
+当前学习 Agent 推理边界（更新于 2026-09-29）。五个 Tool V0.1 均已形成完整证据链；Context Builder、消息构建及包含 `ask_user` 的完整 Agent Decision 与稳定失败反馈已经完成。下一步实现 AskUserDecision 到 Runtime 权威 Action 的接受边界，再逐步接入持久化等待状态。当前完整测试 448 项通过。详细设计演进见 `docs/06-数据结构设计.md`，逐步开发记录见 `docs/16-项目开发日志.md`。
 
 每个切片只处理一个主要概念，并明确留出核心代码由用户先写；AI 提供脚手架、测试和基于真实错误的 Debug 支持。
