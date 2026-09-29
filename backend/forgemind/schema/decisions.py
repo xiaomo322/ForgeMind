@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import Field
 
@@ -8,6 +8,13 @@ from forgemind.schema.read_file import ReadFileArguments
 from forgemind.schema.run_command import RunCommandArguments
 from forgemind.schema.run_tests import RunTestsArguments
 from forgemind.schema.search_code import SearchCodeArguments
+
+
+NonEmptyUserOption = Annotated[str, Field(min_length=1)]
+AskUserOptions = Annotated[
+    tuple[NonEmptyUserOption, ...],
+    Field(min_length=1),
+]
 
 
 class ReadFileToolCallDecision(StrictContractModel):
@@ -60,3 +67,18 @@ class RunCommandToolCallDecision(StrictContractModel):
     tool_name: Literal["run_command"]
     arguments: RunCommandArguments
     reason: str = Field(min_length=1)
+
+
+class AskUserDecision(StrictContractModel):
+    """Agent 缺少必须由用户提供的信息时提出的明确问题。"""
+
+    # 第一步：声明 action_type，只允许字面值 "ask_user"。
+    action_type: Literal["ask_user"]
+    # 第二步：声明非空 reason，说明为什么现有证据不足以继续决策。
+    reason: str = Field(min_length=1)
+    # 第三步：声明非空 question，它是实际展示给用户的问题。
+    question: str = Field(min_length=1)
+
+    # 第四步：声明 options，类型为 AskUserOptions | None，默认值为 None。
+    # 有明确选项时传不可变元组；自由文本问题不需要伪造选项。
+    options: AskUserOptions | None = None

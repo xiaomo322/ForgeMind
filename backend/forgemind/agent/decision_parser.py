@@ -6,6 +6,7 @@ from pydantic import Field, TypeAdapter, ValidationError
 
 from forgemind.schema.base import StrictContractModel
 from forgemind.schema.decisions import (
+    AskUserDecision,
     EditFileToolCallDecision,
     ReadFileToolCallDecision,
     RunCommandToolCallDecision,
@@ -31,10 +32,22 @@ ToolCallDecision = Annotated[
     Field(discriminator="tool_name"),
 ]
 
+# 完整 AgentDecision 先按 action_type 区分 Tool 调用和用户询问；
+# ToolCallDecision 内部再按 tool_name 区分五种工具。
+# 第一步：把当前临时类型替换为带 action_type 判别器的
+# ToolCallDecision | AskUserDecision 联合类型。
+AgentDecision = Annotated[
+    ToolCallDecision | AskUserDecision,
+    Field(discriminator="action_type"),
+]
+
 # 第二步：构造 TypeAdapter，并把 ToolCallDecision 传给它。
 # TypeAdapter 让 Pydantic 能校验联合类型，而不需要再创建一层包装模型。
 # 请把当前临时适配器改为针对 ToolCallDecision 的适配器。
 _TOOL_CALL_DECISION_ADAPTER = TypeAdapter(ToolCallDecision)
+
+# 第二步：构造针对 AgentDecision 的 TypeAdapter。
+_AGENT_DECISION_ADAPTER = TypeAdapter(AgentDecision)
 
 
 class AgentDecisionParseFailure(StrictContractModel):
@@ -51,6 +64,14 @@ def parse_tool_call_decision(raw_response: str) -> ToolCallDecision:
     # 它会一次完成 JSON 解析、tool_name 分派及嵌套 arguments 严格校验。
     # 直接返回结果，不捕获 ValidationError；调用方需要知道解析真实失败。
     return _TOOL_CALL_DECISION_ADAPTER.validate_json(raw_response)
+
+
+def parse_agent_decision(raw_response: str) -> AgentDecision:
+    """解析 Tool 调用或用户询问两类 Agent 决策。"""
+
+    # 第三步：调用 _AGENT_DECISION_ADAPTER.validate_json(raw_response)，
+    # 直接返回严格校验后的 AgentDecision。
+    return _AGENT_DECISION_ADAPTER.validate_json(raw_response)
 
 
 def parse_tool_call_decision_with_feedback(
