@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import Field
 
@@ -71,14 +71,16 @@ class AcceptedRunCommandToolAction(StrictContractModel):
     reason: str = Field(min_length=1)
 
 
-AcceptedToolAction = (
+# 第一步：把五种 Tool Action 联合放入 Annotated，并使用
+# Field(discriminator="tool_name") 建立 Tool 内部判别器。
+AcceptedToolAction = Annotated[
     AcceptedReadFileToolAction
     | AcceptedSearchCodeToolAction
     | AcceptedEditFileToolAction
     | AcceptedRunTestsToolAction
-    | AcceptedRunCommandToolAction
-)
-
+    | AcceptedRunCommandToolAction,
+    Field(discriminator="tool_name"),
+]
 
 class AcceptedAskUserAction(StrictContractModel):
     """Runtime 接受 ask_user 决策后形成的权威等待请求。"""
@@ -91,8 +93,18 @@ class AcceptedAskUserAction(StrictContractModel):
     options: AskUserOptions | None = None
 
 
+# 第二步：建立 AcceptedAction，联合 AcceptedToolAction 和
+# AcceptedAskUserAction，并用 action_type 作为外层判别器。
+# 当前临时类型只包含 Tool，请替换为完整的 Annotated 联合。
+AcceptedAction = Annotated[
+    AcceptedToolAction | AcceptedAskUserAction,
+    Field(discriminator="action_type"),
+]
+
+
 class SequencedActionRecord(StrictContractModel):
     """State 为一个任务内的 AcceptedAction 分配的可靠登记顺序。"""
 
     sequence: int = Field(ge=1)
-    action: AcceptedToolAction
+    # 第三步：把 action 类型从 AcceptedToolAction 改成 AcceptedAction。
+    action: AcceptedAction
