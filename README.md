@@ -78,12 +78,13 @@ docs/         # 01–16 正式设计文档和开发日志
 - Context Renderer 使用带 `schema_version` 和 `context_type` 的稳定 JSON Envelope，并保留中文原文。
 - Agent 输入消息把固定系统规则与不可信 Context JSON 分别放入 `system`、`user` 角色，并强制顺序不变。
 - Agent Decision Parser 依据 `tool_name` 把模型 JSON 严格分派为五种现有 Tool Decision，非法输出不能进入 Runtime。
+- Agent 输出解析失败会复用稳定 Schema 问题列表反馈，不生成 Action 或虚构 Tool Observation。
 - State 为每个任务内的 Action 分配独立连续序号，恢复历史时按照登记顺序返回，不从随机 `action_id` 推断先后。
 
 统一任务 State 及完整 Agent Loop 尚未实现。
 
 ## 当前学习进度
 
-当前学习 Agent 推理边界（更新于 2026-09-29）。五个 Tool V0.1 均已形成完整证据链；Context Builder、消息构建和五种 Tool Decision 的严格 JSON 分派已经完成。下一步把解析失败转换为可反馈的稳定问题列表，同时保证它不会被误记成 Tool 执行失败。当前完整测试 430 项通过。详细设计演进见 `docs/06-数据结构设计.md`，逐步开发记录见 `docs/16-项目开发日志.md`。
+当前学习 Agent 推理边界（更新于 2026-09-29）。五个 Tool V0.1 均已形成完整证据链；Context Builder、消息构建、Tool Decision 严格分派及稳定解析反馈已经完成。下一步把此前确认的 `ask_user` 纳入完整 Agent Decision；它不携带 tool_name，也不能被误判为无效 Tool 请求。当前完整测试 433 项通过。详细设计演进见 `docs/06-数据结构设计.md`，逐步开发记录见 `docs/16-项目开发日志.md`。
 
 每个切片只处理一个主要概念，并明确留出核心代码由用户先写；AI 提供脚手架、测试和基于真实错误的 Debug 支持。
