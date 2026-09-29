@@ -74,12 +74,13 @@ docs/         # 01–16 正式设计文档和开发日志
 - Runtime 状态推进入口从当前权威记录分配下一 revision，登记成功后才返回新状态。
 - `TaskStateView` 聚合任务来源、当前状态和有序 Action 历史；每条 Action 同时携带权限请求、用户决定及终态 Observation，尚不存在的阶段明确为 `None`。
 - 权限请求以 Action 为唯一范围：同一 AcceptedAction 最多询问一次，并可按 action_id 严格恢复或明确返回 `None`。
+- 第一版 Context Builder 按数量保留最近 Action，并显式提供总数、省略数和历史完整标记。
 - State 为每个任务内的 Action 分配独立连续序号，恢复历史时按照登记顺序返回，不从随机 `action_id` 推断先后。
 
 统一任务 State 及完整 Agent Loop 尚未实现。
 
 ## 当前学习进度
 
-当前学习 `06-数据结构设计`（更新于 2026-09-28）。五个 Tool V0.1 均已形成完整证据链；`TaskStateView` 已聚合任务来源、当前状态，以及按序 Action 的权限请求、用户决定和终态 Observation，并通过跨重启模块测试。下一步进入面向 Agent 的上下文构建。当前完整测试 406 项通过。详细设计演进见 `docs/06-数据结构设计.md`，逐步开发记录见 `docs/16-项目开发日志.md`。
+当前学习 Context Builder（更新于 2026-09-29）。五个 Tool V0.1 均已形成完整证据链；`TaskStateView` 已通过跨重启模块测试，第一版 `AgentTaskContext` 能保留任务与当前状态、选择最近 Action，并如实说明被省略的历史。下一步把结构化 Context 渲染为明确的 Agent 输入。当前完整测试 415 项通过。详细设计演进见 `docs/06-数据结构设计.md`，逐步开发记录见 `docs/16-项目开发日志.md`。
 
 每个切片只处理一个主要概念，并明确留出核心代码由用户先写；AI 提供脚手架、测试和基于真实错误的 Debug 支持。
