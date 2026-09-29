@@ -3,7 +3,6 @@
 from typing import Literal, Self
 
 from pydantic import Field, model_validator
-
 from forgemind.schema.base import StrictContractModel
 from forgemind.schema.tasks import (
     ActionStateView,
@@ -75,3 +74,31 @@ class AgentContextEnvelope(StrictContractModel):
     schema_version: Literal["0.1"] = "0.1"
     context_type: Literal["task_context"] = "task_context"
     context: AgentTaskContext
+
+
+class AgentInputMessage(StrictContractModel):
+    """供应商无关的单条 Agent 输入消息。"""
+
+    role: Literal["system", "user"]
+    content: str = Field(min_length=1)
+
+
+class AgentTurnInput(StrictContractModel):
+    """一轮 Agent 推理使用的固定 system + user 消息边界。"""
+
+    messages: tuple[AgentInputMessage, AgentInputMessage]
+
+    @model_validator(mode="after")
+    def require_system_then_user(self) -> Self:
+        """第一条必须是系统规则，第二条必须是上下文数据。"""
+
+        # 第一步：取得 self.messages 两条消息的 role，组成 roles 元组。
+        # 第二步：roles 不等于 ("system", "user") 时，抛出
+        # ValueError("Agent 输入消息必须按 system、user 排列")。
+        roles = tuple(message.role for message in self.messages)
+        if roles != ("system", "user"):
+            raise ValueError(
+                "Agent 输入消息必须按 system、user 排列"
+            )
+        # 第三步：顺序正确时返回 self。
+        return self

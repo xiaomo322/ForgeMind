@@ -88,7 +88,7 @@ ForgeMindState
 
 第一版 `AgentTaskContext` 已实现基于 Action 数量的确定性后缀窗口：任务来源与当前状态始终保留，Action 只保留最近 N 条，同时提供总数、省略数和完整标记。它暂不声称解决 token 预算；Tool 结果已有各自规模限制，后续再增加内容预算与摘要。
 
-Agent Context 使用带 `schema_version` 和 `context_type` 的 Envelope 渲染为确定性 JSON。Renderer 保留中文、固定键顺序，并且不把 JSON 本身当作权限依据；项目文件和 Tool 输出仍是不可信数据，下一层消息构建必须与系统指令明确分离。
+Agent Context 使用带 `schema_version` 和 `context_type` 的 Envelope 渲染为确定性 JSON。Renderer 保留中文和固定键顺序。消息构建器把 ForgeMind 固定规则放入 `system` 消息，把带明确起止标记的 Context JSON 放入 `user` 消息，并由严格模型固定为 system → user 顺序。项目文件、Tool 输出和 Observation 即使包含类似指令的文字，也仍是不可信数据，不能成为权限来源。
 
 模型不应依赖自己记住前一轮对话。Runtime 每轮显式提供必要上下文，避免重复读取、重复修改或遗忘用户拒绝。
 
