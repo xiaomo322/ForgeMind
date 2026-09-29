@@ -80,12 +80,13 @@ docs/         # 01–16 正式设计文档和开发日志
 - Agent Decision Parser 依据 `tool_name` 把模型 JSON 严格分派为五种现有 Tool Decision，非法输出不能进入 Runtime。
 - Agent 输出解析失败会复用稳定 Schema 问题列表反馈，不生成 Action 或虚构 Tool Observation。
 - 完整 Agent Decision 已支持五种 Tool 调用和不携带 Tool 字段的 `ask_user`，并使用两层判别器严格路由。
+- Runtime 可把 AskUserDecision 转换为带权威 task_id/action_id 的 AcceptedAskUserAction，尚未接入通用 Registry。
 - State 为每个任务内的 Action 分配独立连续序号，恢复历史时按照登记顺序返回，不从随机 `action_id` 推断先后。
 
 统一任务 State 及完整 Agent Loop 尚未实现。
 
 ## 当前学习进度
 
-当前学习 Agent 推理边界（更新于 2026-09-29）。五个 Tool V0.1 均已形成完整证据链；Context Builder、消息构建及包含 `ask_user` 的完整 Agent Decision 与稳定失败反馈已经完成。下一步实现 AskUserDecision 到 Runtime 权威 Action 的接受边界，再逐步接入持久化等待状态。当前完整测试 448 项通过。详细设计演进见 `docs/06-数据结构设计.md`，逐步开发记录见 `docs/16-项目开发日志.md`。
+当前学习 Agent 推理边界（更新于 2026-09-29）。五个 Tool V0.1 均已形成完整证据链；包含 `ask_user` 的完整 Agent Decision、稳定失败反馈及 Runtime 接受转换已经完成。下一步把 Action Registry 从 Tool 专用结构迁移为同时支持询问用户的通用持久化边界。当前完整测试 451 项通过。详细设计演进见 `docs/06-数据结构设计.md`，逐步开发记录见 `docs/16-项目开发日志.md`。
 
 每个切片只处理一个主要概念，并明确留出核心代码由用户先写；AI 提供脚手架、测试和基于真实错误的 Debug 支持。

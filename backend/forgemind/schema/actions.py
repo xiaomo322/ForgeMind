@@ -8,6 +8,7 @@ from forgemind.schema.read_file import ReadFileArguments
 from forgemind.schema.run_command import RunCommandArguments
 from forgemind.schema.run_tests import RunTestsArguments
 from forgemind.schema.search_code import SearchCodeArguments
+from forgemind.schema.decisions import AskUserOptions
 
 
 class AcceptedReadFileToolAction(StrictContractModel):
@@ -77,6 +78,17 @@ AcceptedToolAction = (
     | AcceptedRunTestsToolAction
     | AcceptedRunCommandToolAction
 )
+
+
+class AcceptedAskUserAction(StrictContractModel):
+    """Runtime 接受 ask_user 决策后形成的权威等待请求。"""
+
+    action_id: str = Field(min_length=1)
+    task_id: str = Field(min_length=1)
+    action_type: Literal["ask_user"]
+    reason: str = Field(min_length=1)
+    question: str = Field(min_length=1)
+    options: AskUserOptions | None = None
 
 
 class SequencedActionRecord(StrictContractModel):

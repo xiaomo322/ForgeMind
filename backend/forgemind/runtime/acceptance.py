@@ -2,6 +2,7 @@ from collections.abc import Callable
 
 from forgemind.runtime.ids import new_action_id
 from forgemind.schema.actions import (
+    AcceptedAskUserAction,
     AcceptedEditFileToolAction,
     AcceptedReadFileToolAction,
     AcceptedRunCommandToolAction,
@@ -9,6 +10,7 @@ from forgemind.schema.actions import (
     AcceptedSearchCodeToolAction,
 )
 from forgemind.schema.decisions import (
+    AskUserDecision,
     EditFileToolCallDecision,
     ReadFileToolCallDecision,
     RunCommandToolCallDecision,
@@ -30,6 +32,30 @@ class ActionIdAllocationError(RuntimeError):
     def __init__(self, attempts: int) -> None:
         self.attempts = attempts
         super().__init__(f"连续 {attempts} 次生成了重复 action_id")
+
+
+def accept_ask_user_decision(
+    decision: AskUserDecision,
+    *,
+    task_id: str,
+    next_action_id: ActionIdFactory = new_action_id,
+) -> AcceptedAskUserAction:
+    """把已校验的用户询问转换为 Runtime 权威 Action。"""
+
+    # 第一步：调用 next_action_id()，把结果保存为 action_id。编号只能由
+    # Runtime 工厂产生，不能从 decision 读取。
+    action_id = next_action_id()
+    # 第二步：构造并返回 AcceptedAskUserAction；action_id 和 task_id 使用
+    # Runtime 值，其余 action_type、reason、question、options 从不可变的
+    # decision 原样传入。
+    return AcceptedAskUserAction(
+        action_id=action_id,
+        task_id=task_id,
+        action_type=decision.action_type,
+        reason=decision.reason,
+        question=decision.question,
+        options=decision.options,
+    )
 
 
 def accept_read_file_decision(
