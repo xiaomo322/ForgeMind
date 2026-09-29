@@ -5,12 +5,12 @@ import sqlite3
 
 from pydantic import TypeAdapter, ValidationError
 
-from forgemind.schema.actions import AcceptedToolAction, SequencedActionRecord
+from forgemind.schema.actions import AcceptedAction, SequencedActionRecord
 from forgemind.state.action_registry import DuplicateActionIdError
 from forgemind.state.sqlite_task_registry import UnknownTaskIdError
 
 
-_ACTION_ADAPTER = TypeAdapter(AcceptedToolAction)
+_ACTION_ADAPTER = TypeAdapter(AcceptedAction)
 
 
 class CorruptStoredActionError(RuntimeError):
@@ -42,7 +42,8 @@ class SQLiteActionRegistry:
                     action_id TEXT PRIMARY KEY,
                     task_id TEXT NOT NULL,
                     task_sequence INTEGER NOT NULL,
-                    tool_name TEXT NOT NULL,
+                    action_type TEXT NOT NULL,
+                    tool_name TEXT,
                     payload_json TEXT NOT NULL,
                     UNIQUE (task_id, task_sequence),
                     FOREIGN KEY (task_id) REFERENCES tasks(task_id)
@@ -56,11 +57,19 @@ class SQLiteActionRegistry:
 
         return self._database_path
 
-    def register(self, action: AcceptedToolAction) -> None:
+    def register(self, action: AcceptedAction) -> None:
         """在一个事务中追加 Action；重复编号不能覆盖原记录。"""
 
         # 第一步：调用 action.model_dump_json() 得到严格模型的 JSON。
         payload_json = action.model_dump_json()
+
+        # 第一步：如果 action.action_type 是 "tool_call"，tool_name 使用
+        # action.tool_name；否则它必须为 None，数据库会保存为 SQL NULL。
+        # 请在这里实现并得到局部变量 tool_name。
+        if action.action_type == "tool_call":
+            tool_name = action.tool_name
+        else:
+            tool_name = None
 
         try:
             # 第二步：用 sqlite3.connect 打开数据库，并在 with 事务中执行：
@@ -106,16 +115,18 @@ class SQLiteActionRegistry:
                         action_id,
                         task_id,
                         task_sequence,
+                        action_type,
                         tool_name,
                         payload_json
                     )
-                    VALUES (?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?)
                     """,
                     (
                         action.action_id,
                         action.task_id,
                         next_sequence,
-                        action.tool_name,
+                        action.action_type,
+                        tool_name,
                         payload_json,
                     ),
                 )
@@ -124,13 +135,13 @@ class SQLiteActionRegistry:
         except sqlite3.IntegrityError:
             raise DuplicateActionIdError(action.action_id) from None
 
-    def get(self, action_id: str) -> AcceptedToolAction:
+    def get(self, action_id: str) -> AcceptedAction:
         """按编号读取 JSON，并通过严格联合类型重建 Action。"""
 
         with sqlite3.connect(self._database_path) as connection:
             row = connection.execute(
                 """
-                SELECT task_id, payload_json
+                SELECT task_id, action_type, tool_name, payload_json
                 FROM actions
                 WHERE action_id = ?
                 """,
@@ -140,7 +151,7 @@ class SQLiteActionRegistry:
         if row is None:
             raise KeyError(action_id)
 
-        return self._restore(action_id, row[0], row[1])
+        return self._restore(action_id, row[0], row[1], row[2], row[3])
 
     def list_for_task(self, task_id: str) -> tuple[SequencedActionRecord, ...]:
         """按 State 分配的任务内序号返回 Action，不按随机 ID 排序。"""
@@ -148,7 +159,13 @@ class SQLiteActionRegistry:
         with sqlite3.connect(self._database_path) as connection:
             rows = connection.execute(
                 """
-                SELECT action_id, task_sequence, task_id, payload_json
+                SELECT
+                    action_id,
+                    task_sequence,
+                    task_id,
+                    action_type,
+                    tool_name,
+                    payload_json
                 FROM actions
                 WHERE task_id = ?
                 ORDER BY task_sequence
@@ -159,23 +176,54 @@ class SQLiteActionRegistry:
         return tuple(
             SequencedActionRecord(
                 sequence=sequence,
-                action=self._restore(action_id, stored_task_id, payload_json),
+                action=self._restore(
+                    action_id,
+                    stored_task_id,
+                    stored_action_type,
+                    stored_tool_name,
+                    payload_json,
+                ),
             )
-            for action_id, sequence, stored_task_id, payload_json in rows
+            for (
+                action_id,
+                sequence,
+                stored_task_id,
+                stored_action_type,
+                stored_tool_name,
+                payload_json,
+            ) in rows
         )
 
     @staticmethod
     def _restore(
         action_id: str,
         stored_task_id: str,
+        stored_action_type: str,
+        stored_tool_name: str | None,
         payload_json: str,
-    ) -> AcceptedToolAction:
+    ) -> AcceptedAction:
         try:
             action = _ACTION_ADAPTER.validate_json(payload_json)
         except ValidationError as exc:
             raise CorruptStoredActionError(action_id, exc) from exc
 
-        if action.action_id != action_id or action.task_id != stored_task_id:
+        # 第二步：先核对 action_id、task_id、action_type。然后按类型核对：
+        # Tool Action 的 action.tool_name 必须等于 stored_tool_name；
+        # AskUserAction 的 stored_tool_name 必须为 None。任何不一致都抛出
+        # CorruptStoredActionError(action_id)。请替换当前临时判断。
+        if (
+            action.action_id != action_id
+            or action.task_id != stored_task_id
+            or action.action_type != stored_action_type
+            or (
+                action.action_type == "tool_call"
+                and action.tool_name != stored_tool_name
+            )
+            or (
+                action.action_type == "ask_user"
+                and stored_tool_name is not None
+            )
+        ):
             raise CorruptStoredActionError(action_id)
 
         return action
