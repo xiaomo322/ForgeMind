@@ -87,6 +87,26 @@ class UserAnswerQuestionNotCurrentError(ValueError):
     """回答引用的不是当前等待的最新询问。"""
 
 
+class UserCancelStatusTaskMismatchError(ValueError):
+    """用户取消与终止状态没有引用同一任务。"""
+
+
+class InvalidUserCancelTypeError(ValueError):
+    """取消流程只接受 CANCEL，不处理 ANSWER。"""
+
+
+class InvalidUserCancelCancelledStatusError(ValueError):
+    """用户取消只能与新的 CANCELLED 状态一起登记。"""
+
+
+class UserCancelRequiresWaitingStatusError(ValueError):
+    """询问响应式取消只能终止 WAITING_USER 任务。"""
+
+
+class UserCancelQuestionNotCurrentError(ValueError):
+    """取消引用的不是当前等待的最新询问。"""
+
+
 @dataclass(frozen=True, slots=True)
 class SQLiteForgeMindState:
     """持有一组连接到同一数据库且依赖关系正确的 Registry。"""
@@ -253,6 +273,44 @@ class SQLiteForgeMindState:
         if running_status.status is not TaskStatus.RUNNING:
             raise InvalidUserAnswerRunningStatusError
 
+        self._record_user_response_status(
+            response,
+            running_status,
+            requires_waiting_error=UserAnswerRequiresWaitingStatusError,
+            question_not_current_error=UserAnswerQuestionNotCurrentError,
+        )
+
+    def record_user_cancel_cancelled(
+        self,
+        response: UserResponseRecord,
+        cancelled_status: TaskStatusRecord,
+    ) -> None:
+        """原子保存用户取消并把等待任务转为终止。"""
+
+        if response.task_id != cancelled_status.task_id:
+            raise UserCancelStatusTaskMismatchError
+        if response.response_type is not UserResponseType.CANCEL:
+            raise InvalidUserCancelTypeError
+        if cancelled_status.status is not TaskStatus.CANCELLED:
+            raise InvalidUserCancelCancelledStatusError
+
+        self._record_user_response_status(
+            response,
+            cancelled_status,
+            requires_waiting_error=UserCancelRequiresWaitingStatusError,
+            question_not_current_error=UserCancelQuestionNotCurrentError,
+        )
+
+    def _record_user_response_status(
+        self,
+        response: UserResponseRecord,
+        next_status: TaskStatusRecord,
+        *,
+        requires_waiting_error: type[ValueError],
+        question_not_current_error: type[ValueError],
+    ) -> None:
+        """在一个写事务中登记询问响应及其目标状态。"""
+
         try:
             question = self.actions.get(response.question_action_id)
         except KeyError:
@@ -264,7 +322,7 @@ class SQLiteForgeMindState:
         validate_user_response_for_question(response, question)
 
         response_payload_json = response.model_dump_json()
-        status_payload_json = running_status.model_dump_json()
+        status_payload_json = next_status.model_dump_json()
 
         try:
             with sqlite3.connect(self.database_path) as connection:
@@ -291,18 +349,18 @@ class SQLiteForgeMindState:
                     latest_stored_status,
                 )
                 if current.status is not TaskStatus.WAITING_USER:
-                    raise UserAnswerRequiresWaitingStatusError
+                    raise requires_waiting_error()
 
                 expected_revision = current.revision + 1
-                if running_status.revision != expected_revision:
+                if next_status.revision != expected_revision:
                     raise NonSequentialTaskStatusRevisionError(
                         response.task_id,
                         expected_revision,
-                        running_status.revision,
+                        next_status.revision,
                     )
                 require_task_status_transition(
                     current.status,
-                    running_status.status,
+                    next_status.status,
                 )
 
                 latest_action_row = connection.execute(
@@ -319,7 +377,7 @@ class SQLiteForgeMindState:
                     latest_action_row is None
                     or latest_action_row[0] != response.question_action_id
                 ):
-                    raise UserAnswerQuestionNotCurrentError
+                    raise question_not_current_error()
 
                 connection.execute(
                     """
@@ -352,23 +410,23 @@ class SQLiteForgeMindState:
                     VALUES (?, ?, ?, ?, ?)
                     """,
                     (
-                        running_status.task_status_id,
-                        running_status.task_id,
-                        running_status.revision,
-                        running_status.status.value,
+                        next_status.task_status_id,
+                        next_status.task_id,
+                        next_status.revision,
+                        next_status.status.value,
                         status_payload_json,
                     ),
                 )
         except sqlite3.IntegrityError:
-            self._raise_user_answer_running_conflict(
+            self._raise_user_response_status_conflict(
                 response,
-                running_status,
+                next_status,
             )
 
-    def _raise_user_answer_running_conflict(
+    def _raise_user_response_status_conflict(
         self,
         response: UserResponseRecord,
-        running_status: TaskStatusRecord,
+        next_status: TaskStatusRecord,
     ) -> None:
         """事务回滚后把唯一约束冲突转为稳定领域错误。"""
 
@@ -383,7 +441,7 @@ class SQLiteForgeMindState:
             ).fetchone()
             status_id_exists = connection.execute(
                 "SELECT 1 FROM task_statuses WHERE task_status_id = ?",
-                (running_status.task_status_id,),
+                (next_status.task_status_id,),
             ).fetchone()
 
         if response_id_exists is not None:
@@ -394,9 +452,9 @@ class SQLiteForgeMindState:
             ) from None
         if status_id_exists is not None:
             raise DuplicateTaskStatusIdError(
-                running_status.task_status_id
+                next_status.task_status_id
             ) from None
-        raise RuntimeError("用户回答恢复违反未知的 SQLite 完整性约束")
+        raise RuntimeError("用户询问响应违反未知的 SQLite 完整性约束")
 
     def get_task_view(self, task_id: str) -> TaskStateView:
         """组合不可变任务来源、当前状态和有序 Action 历史。"""
