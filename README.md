@@ -85,12 +85,13 @@ docs/         # 01–16 正式设计文档和开发日志
 - 新建 SQLite Action Registry 已能保存和严格恢复 Tool/AskUserAction，并交叉核对通用索引列与完整 JSON。
 - 旧版 Tool 专用 actions 表会在事务中迁移为通用结构，保留记录、任务序号和外部引用名称。
 - TaskStateView 已支持 AskUserAction，并拒绝为询问 Action 拼接 Tool 权限记录或 Tool Observation。
+- SQLiteForgeMindState 可在一个事务中登记 AskUserAction 与 WAITING_USER 状态，任一写入失败会整体回滚。
 - State 为每个任务内的 Action 分配独立连续序号，恢复历史时按照登记顺序返回，不从随机 `action_id` 推断先后。
 
 统一任务 State 及完整 Agent Loop 尚未实现。
 
 ## 当前学习进度
 
-当前学习 Agent 推理边界（更新于 2026-09-30）。五个 Tool V0.1 均已形成完整证据链；`ask_user` 已完成 Decision、接受、持久化和任务视图组合校验。下一步实现 AskUserAction 登记与任务 WAITING_USER 状态变更的原子 Runtime 编排。当前完整测试 465 项通过。详细设计演进见 `docs/06-数据结构设计.md`，逐步开发记录见 `docs/16-项目开发日志.md`。
+当前学习 Agent 推理边界（更新于 2026-09-30）。五个 Tool V0.1 均已形成完整证据链；`ask_user` 已完成 Decision、持久化、任务视图及底层原子等待记录。下一步实现高层 Runtime 入口，由编号工厂构造 Action/Status 后调用原子 State。当前完整测试 469 项通过。详细设计演进见 `docs/06-数据结构设计.md`，逐步开发记录见 `docs/16-项目开发日志.md`。
 
 每个切片只处理一个主要概念，并明确留出核心代码由用户先写；AI 提供脚手架、测试和基于真实错误的 Debug 支持。

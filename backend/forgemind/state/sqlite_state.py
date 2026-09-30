@@ -5,6 +5,8 @@ from pathlib import Path
 import sqlite3
 from typing import Self
 
+from forgemind.runtime.task_status import require_task_status_transition
+from forgemind.schema.actions import AcceptedAskUserAction
 from forgemind.schema.tasks import (
     ActionStateView,
     TaskRecord,
@@ -13,6 +15,7 @@ from forgemind.schema.tasks import (
     TaskStatusRecord,
 )
 from forgemind.state.sqlite_action_registry import SQLiteActionRegistry
+from forgemind.state.action_registry import DuplicateActionIdError
 from forgemind.state.sqlite_observation_registry import (
     SQLiteObservationRegistry,
 )
@@ -29,6 +32,7 @@ from forgemind.state.sqlite_task_registry import (
 from forgemind.state.sqlite_task_status_registry import (
     DuplicateTaskStatusIdError,
     InvalidInitialTaskStatusError,
+    NonSequentialTaskStatusRevisionError,
     SQLiteTaskStatusRegistry,
 )
 
@@ -44,6 +48,14 @@ class TaskStatusTaskMismatchError(ValueError):
         )
 
 
+class AskUserWaitingTaskMismatchError(ValueError):
+    """询问 Action 与等待状态没有引用同一任务。"""
+
+
+class InvalidAskUserWaitingStatusError(ValueError):
+    """询问 Action 只能与 WAITING_USER 状态一起登记。"""
+
+
 @dataclass(frozen=True, slots=True)
 class SQLiteForgeMindState:
     """持有一组连接到同一数据库且依赖关系正确的 Registry。"""
@@ -55,6 +67,146 @@ class SQLiteForgeMindState:
     permission_requests: SQLitePermissionRequestRegistry
     permission_decisions: SQLitePermissionDecisionRegistry
     observations: SQLiteObservationRegistry
+
+    def record_ask_user_waiting(
+        self,
+        action: AcceptedAskUserAction,
+        waiting_status: TaskStatusRecord,
+    ) -> None:
+        """原子登记询问 Action 和对应的 WAITING_USER 状态。"""
+
+        if action.task_id != waiting_status.task_id:
+            raise AskUserWaitingTaskMismatchError
+        if waiting_status.status is not TaskStatus.WAITING_USER:
+            raise InvalidAskUserWaitingStatusError
+
+        action_payload_json = action.model_dump_json()
+        status_payload_json = waiting_status.model_dump_json()
+
+        try:
+            with sqlite3.connect(self.database_path) as connection:
+                connection.execute("PRAGMA foreign_keys = ON")
+                connection.execute("BEGIN IMMEDIATE")
+
+                task_row = connection.execute(
+                    "SELECT 1 FROM tasks WHERE task_id = ?",
+                    (action.task_id,),
+                ).fetchone()
+                if task_row is None:
+                    from forgemind.state.sqlite_task_registry import (
+                        UnknownTaskIdError,
+                    )
+
+                    raise UnknownTaskIdError(action.task_id)
+
+                latest_row = connection.execute(
+                    """
+                    SELECT task_status_id, task_id, revision,
+                           status, payload_json
+                    FROM task_statuses
+                    WHERE task_id = ?
+                    ORDER BY revision DESC
+                    LIMIT 1
+                    """,
+                    (action.task_id,),
+                ).fetchone()
+                if latest_row is None:
+                    raise KeyError(action.task_id)
+
+                latest_status_id, *latest_stored_record = latest_row
+                current = SQLiteTaskStatusRegistry._restore(
+                    latest_status_id,
+                    latest_stored_record,
+                )
+                expected_revision = current.revision + 1
+                if waiting_status.revision != expected_revision:
+                    raise NonSequentialTaskStatusRevisionError(
+                        action.task_id,
+                        expected_revision,
+                        waiting_status.revision,
+                    )
+                require_task_status_transition(
+                    current.status,
+                    waiting_status.status,
+                )
+
+                sequence_row = connection.execute(
+                    """
+                    SELECT COALESCE(MAX(task_sequence), 0) + 1
+                    FROM actions
+                    WHERE task_id = ?
+                    """,
+                    (action.task_id,),
+                ).fetchone()
+                next_sequence = sequence_row[0]
+
+                connection.execute(
+                    """
+                    INSERT INTO actions (
+                        action_id,
+                        task_id,
+                        task_sequence,
+                        action_type,
+                        tool_name,
+                        payload_json
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        action.action_id,
+                        action.task_id,
+                        next_sequence,
+                        action.action_type,
+                        None,
+                        action_payload_json,
+                    ),
+                )
+                connection.execute(
+                    """
+                    INSERT INTO task_statuses (
+                        task_status_id,
+                        task_id,
+                        revision,
+                        status,
+                        payload_json
+                    )
+                    VALUES (?, ?, ?, ?, ?)
+                    """,
+                    (
+                        waiting_status.task_status_id,
+                        waiting_status.task_id,
+                        waiting_status.revision,
+                        waiting_status.status.value,
+                        status_payload_json,
+                    ),
+                )
+        except sqlite3.IntegrityError:
+            self._raise_ask_user_waiting_conflict(action, waiting_status)
+
+    def _raise_ask_user_waiting_conflict(
+        self,
+        action: AcceptedAskUserAction,
+        waiting_status: TaskStatusRecord,
+    ) -> None:
+        """事务回滚后把唯一约束冲突转换为稳定领域错误。"""
+
+        with sqlite3.connect(self.database_path) as connection:
+            action_exists = connection.execute(
+                "SELECT 1 FROM actions WHERE action_id = ?",
+                (action.action_id,),
+            ).fetchone()
+            status_exists = connection.execute(
+                "SELECT 1 FROM task_statuses WHERE task_status_id = ?",
+                (waiting_status.task_status_id,),
+            ).fetchone()
+
+        if action_exists is not None:
+            raise DuplicateActionIdError(action.action_id) from None
+        if status_exists is not None:
+            raise DuplicateTaskStatusIdError(
+                waiting_status.task_status_id
+            ) from None
+        raise RuntimeError("询问等待记录违反未知的 SQLite 完整性约束")
 
     def get_task_view(self, task_id: str) -> TaskStateView:
         """组合不可变任务来源、当前状态和有序 Action 历史。"""
