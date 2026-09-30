@@ -127,6 +127,7 @@ def test_task_state_view_rejects_action_from_another_task(
                 ActionStateView(
                     sequence=1,
                     action=_action("action-001", "task-other"),
+                    user_response=None,
                     permission_request=None,
                     permission_decision=None,
                     observation=None,
@@ -146,6 +147,7 @@ def test_task_state_view_rejects_non_continuous_action_sequence(
                 ActionStateView(
                     sequence=2,
                     action=_action("action-002"),
+                    user_response=None,
                     permission_request=None,
                     permission_decision=None,
                     observation=None,
@@ -159,6 +161,7 @@ def test_action_state_view_rejects_observation_for_another_action() -> None:
         ActionStateView(
             sequence=1,
             action=_action("action-001"),
+            user_response=None,
             permission_request=None,
             permission_decision=None,
             observation=_rejected("action-other"),
@@ -173,6 +176,7 @@ def test_action_state_view_rejects_request_for_another_action() -> None:
         ActionStateView(
             sequence=1,
             action=action,
+            user_response=None,
             permission_request=other_request,
             permission_decision=None,
             observation=None,
@@ -187,6 +191,7 @@ def test_action_state_view_rejects_decision_without_request() -> None:
         ActionStateView(
             sequence=1,
             action=action,
+            user_response=None,
             permission_request=None,
             permission_decision=_permission_decision(request),
             observation=None,
@@ -202,6 +207,7 @@ def test_action_state_view_rejects_decision_for_another_request() -> None:
         ActionStateView(
             sequence=1,
             action=action,
+            user_response=None,
             permission_request=request,
             permission_decision=_permission_decision(other_request),
             observation=None,
@@ -262,6 +268,7 @@ def test_state_view_restores_actions_in_registration_order(
         ActionStateView(
             sequence=1,
             action=first_action,
+            user_response=None,
             permission_request=None,
             permission_decision=None,
             observation=None,
@@ -269,6 +276,7 @@ def test_state_view_restores_actions_in_registration_order(
         ActionStateView(
             sequence=2,
             action=second_action,
+            user_response=None,
             permission_request=second_request,
             permission_decision=second_decision,
             observation=second_observation,

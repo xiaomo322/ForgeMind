@@ -8,6 +8,7 @@ from pydantic import Field, field_validator, model_validator
 
 from forgemind.schema.actions import AcceptedAction
 from forgemind.schema.base import StrictContractModel
+from forgemind.schema.interactions import UserResponseRecord, UserResponseType
 from forgemind.schema.observations import TerminalObservation
 from forgemind.schema.permissions import (
     PendingPermissionRequest,
@@ -73,6 +74,9 @@ class ActionStateView(StrictContractModel):
 
     sequence: int = Field(ge=1)
     action: AcceptedAction
+    # 必须显式传入 None 或查询到的回答，避免把“未查询”
+    # 错当成“已查询且没有回答”。
+    user_response: UserResponseRecord | None
     permission_request: PendingPermissionRequest | None
     permission_decision: PermissionDecisionRecord | None
     observation: TerminalObservation | None
@@ -99,7 +103,34 @@ class ActionStateView(StrictContractModel):
                 raise ValueError(
                     "AskUser Action 不能包含 Tool Observation"
                 )
+
+            if self.user_response is not None:
+                if (
+                    self.user_response.task_id != self.action.task_id
+                    or self.user_response.question_action_id
+                    != self.action.action_id
+                ):
+                    raise ValueError("用户回答不属于对应的 AskUser Action")
+
+                if self.user_response.response_type is UserResponseType.ANSWER:
+                    if (
+                        self.action.options is None
+                        and self.user_response.selected_option is not None
+                    ):
+                        raise ValueError("自由文本回答不能携带选项")
+                    if (
+                        self.action.options is not None
+                        and (
+                            self.user_response.selected_option is None
+                            or self.user_response.selected_option
+                            not in self.action.options
+                        )
+                    ):
+                        raise ValueError("用户选项不属于原问题")
             return self
+
+        if self.user_response is not None:
+            raise ValueError("Tool Action 不能包含用户回答")
 
         # 第二步：如果 permission_request 不为 None，检查它的 task_id、
         # action_id、action_type、tool_name 和 arguments 是否分别等于

@@ -12,6 +12,7 @@ from forgemind.schema.observations import (
     ObservationErrorCode,
     RejectedObservation,
 )
+from forgemind.schema.interactions import UserResponseRecord, UserResponseType
 from forgemind.schema.permissions import PendingReadFilePermissionRequest
 from forgemind.schema.tasks import (
     ActionStateView,
@@ -57,10 +58,27 @@ def _tool_permission() -> PendingReadFilePermissionRequest:
     )
 
 
+def _user_response(
+    *,
+    task_id: str = "task-ask-001",
+    question_action_id: str = "action-ask-001",
+) -> UserResponseRecord:
+    return UserResponseRecord(
+        response_id="response-001",
+        task_id=task_id,
+        question_action_id=question_action_id,
+        response_type=UserResponseType.ANSWER,
+        raw_response="可以叠加",
+        selected_option=None,
+        cancellation_reason=None,
+    )
+
+
 def test_ask_user_action_state_has_no_tool_execution_chain() -> None:
     view = ActionStateView(
         sequence=1,
         action=_ask_action(),
+        user_response=None,
         permission_request=None,
         permission_decision=None,
         observation=None,
@@ -69,11 +87,46 @@ def test_ask_user_action_state_has_no_tool_execution_chain() -> None:
     assert view.action.action_type == "ask_user"
 
 
+def test_ask_user_action_state_accepts_its_user_response() -> None:
+    view = ActionStateView(
+        sequence=1,
+        action=_ask_action(),
+        user_response=_user_response(),
+        permission_request=None,
+        permission_decision=None,
+        observation=None,
+    )
+
+    assert view.user_response == _user_response()
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        _user_response(task_id="task-other"),
+        _user_response(question_action_id="action-other"),
+    ],
+)
+def test_ask_user_action_rejects_response_for_another_question(
+    response: UserResponseRecord,
+) -> None:
+    with pytest.raises(ValidationError):
+        ActionStateView(
+            sequence=1,
+            action=_ask_action(),
+            user_response=response,
+            permission_request=None,
+            permission_decision=None,
+            observation=None,
+        )
+
+
 def test_ask_user_action_rejects_tool_permission_request() -> None:
     with pytest.raises(ValidationError):
         ActionStateView(
             sequence=1,
             action=_ask_action(),
+            user_response=None,
             permission_request=_tool_permission(),
             permission_decision=None,
             observation=None,
@@ -85,6 +138,7 @@ def test_ask_user_action_rejects_tool_observation() -> None:
         ActionStateView(
             sequence=1,
             action=_ask_action(),
+            user_response=None,
             permission_request=None,
             permission_decision=None,
             observation=RejectedObservation(
@@ -123,6 +177,7 @@ def test_sqlite_task_view_restores_ask_user_action(tmp_path: Path) -> None:
         ActionStateView(
             sequence=1,
             action=_ask_action(),
+            user_response=None,
             permission_request=None,
             permission_decision=None,
             observation=None,

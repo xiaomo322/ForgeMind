@@ -194,3 +194,14 @@ class SQLiteUserResponseRegistry:
         if row is None:
             raise KeyError(question_action_id)
         return self.get(row[0])
+
+    def get_optional_for_question(
+        self,
+        question_action_id: str,
+    ) -> UserResponseRecord | None:
+        """问题尚未回答时返回 None，损坏记录仍明确失败。"""
+
+        try:
+            return self.get_for_question(question_action_id)
+        except KeyError:
+            return None

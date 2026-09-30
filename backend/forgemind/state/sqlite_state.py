@@ -405,6 +405,15 @@ class SQLiteForgeMindState:
         action_states: list[ActionStateView] = []
 
         for record in action_records:
+            if record.action.action_type == "ask_user":
+                user_response = (
+                    self.user_responses.get_optional_for_question(
+                        record.action.action_id
+                    )
+                )
+            else:
+                user_response = None
+
             # 第一步：使用 record.action.action_id 调用
             # self.permission_requests.get_optional_for_action(...)，保存为
             # permission_request。
@@ -431,6 +440,7 @@ class SQLiteForgeMindState:
                 ActionStateView(
                     sequence=record.sequence,
                     action=record.action,
+                    user_response=user_response,
                     permission_request=permission_request,
                     permission_decision=permission_decision,
                     observation=self.observations.get_optional(

@@ -36,6 +36,7 @@ def _action_state(sequence: int) -> ActionStateView:
     return ActionStateView(
         sequence=sequence,
         action=action,
+        user_response=None,
         permission_request=None,
         permission_decision=None,
         observation=None,
