@@ -13,3 +13,9 @@ def new_task_status_id() -> str:
     """生成供 Runtime 使用的任务状态记录标识。"""
 
     return f"task_status_{uuid4()}"
+
+
+def new_user_response_id() -> str:
+    """生成供 Runtime 使用的用户回答标识。"""
+
+    return f"user_response_{uuid4()}"
