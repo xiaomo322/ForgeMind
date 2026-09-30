@@ -93,6 +93,6 @@ docs/         # 01–16 正式设计文档和开发日志
 
 ## 当前学习进度
 
-当前学习 Agent 推理边界（更新于 2026-09-30）。五个 Tool V0.1 均已形成完整证据链；`ask_user` 从模型 Decision 到持久化 WAITING_USER 的单向链路已经完成。`UserResponseRecord` 的严格契约、原问题交叉校验、内存/SQLite 注册表及统一 State 接线已完成；下一步原子完成“保存回答 + WAITING_USER 恢复 RUNNING”。当前完整测试 502 项通过。详细设计演进见 `docs/06-数据结构设计.md`，逐步开发记录见 `docs/16-项目开发日志.md`。
+当前学习 Agent 推理边界（更新于 2026-09-30）。五个 Tool V0.1 均已形成完整证据链；`ask_user` 从模型 Decision 到持久化 WAITING_USER 的单向链路已经完成。`UserResponseRecord` 的严格契约、原问题交叉校验、持久化及统一 State 接线已完成；State 已能原子保存 ANSWER 并将任务从 WAITING_USER 恢复 RUNNING。下一步实现生成编号、构造模型并调用原子 State 的高层 Runtime 入口。当前完整测试 509 项通过。详细设计演进见 `docs/06-数据结构设计.md`，逐步开发记录见 `docs/16-项目开发日志.md`。
 
 每个切片只处理一个主要概念，并明确留出核心代码由用户先写；AI 提供脚手架、测试和基于真实错误的 Debug 支持。

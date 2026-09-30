@@ -6,7 +6,9 @@ import sqlite3
 from typing import Self
 
 from forgemind.runtime.task_status import require_task_status_transition
+from forgemind.runtime.user_responses import validate_user_response_for_question
 from forgemind.schema.actions import AcceptedAskUserAction
+from forgemind.schema.interactions import UserResponseRecord, UserResponseType
 from forgemind.schema.tasks import (
     ActionStateView,
     TaskRecord,
@@ -38,6 +40,12 @@ from forgemind.state.sqlite_task_status_registry import (
 from forgemind.state.sqlite_user_response_registry import (
     SQLiteUserResponseRegistry,
 )
+from forgemind.state.user_response_registry import (
+    DuplicateQuestionResponseError,
+    DuplicateUserResponseIdError,
+    QuestionActionTypeError,
+    UnknownQuestionActionIdError,
+)
 
 
 class TaskStatusTaskMismatchError(ValueError):
@@ -57,6 +65,26 @@ class AskUserWaitingTaskMismatchError(ValueError):
 
 class InvalidAskUserWaitingStatusError(ValueError):
     """询问 Action 只能与 WAITING_USER 状态一起登记。"""
+
+
+class UserAnswerStatusTaskMismatchError(ValueError):
+    """用户回答与恢复状态没有引用同一任务。"""
+
+
+class InvalidUserAnswerTypeError(ValueError):
+    """回答恢复流程只接受 ANSWER，不处理 CANCEL。"""
+
+
+class InvalidUserAnswerRunningStatusError(ValueError):
+    """有效回答只能与新的 RUNNING 状态一起登记。"""
+
+
+class UserAnswerRequiresWaitingStatusError(ValueError):
+    """只有当前处于 WAITING_USER 的任务才能由回答恢复。"""
+
+
+class UserAnswerQuestionNotCurrentError(ValueError):
+    """回答引用的不是当前等待的最新询问。"""
 
 
 @dataclass(frozen=True, slots=True)
@@ -210,6 +238,165 @@ class SQLiteForgeMindState:
                 waiting_status.task_status_id
             ) from None
         raise RuntimeError("询问等待记录违反未知的 SQLite 完整性约束")
+
+    def record_user_answer_running(
+        self,
+        response: UserResponseRecord,
+        running_status: TaskStatusRecord,
+    ) -> None:
+        """原子保存有效回答并把任务从等待恢复为运行。"""
+
+        if response.task_id != running_status.task_id:
+            raise UserAnswerStatusTaskMismatchError
+        if response.response_type is not UserResponseType.ANSWER:
+            raise InvalidUserAnswerTypeError
+        if running_status.status is not TaskStatus.RUNNING:
+            raise InvalidUserAnswerRunningStatusError
+
+        try:
+            question = self.actions.get(response.question_action_id)
+        except KeyError:
+            raise UnknownQuestionActionIdError(
+                response.question_action_id
+            ) from None
+        if not isinstance(question, AcceptedAskUserAction):
+            raise QuestionActionTypeError(response.question_action_id)
+        validate_user_response_for_question(response, question)
+
+        response_payload_json = response.model_dump_json()
+        status_payload_json = running_status.model_dump_json()
+
+        try:
+            with sqlite3.connect(self.database_path) as connection:
+                connection.execute("PRAGMA foreign_keys = ON")
+                connection.execute("BEGIN IMMEDIATE")
+
+                latest_status_row = connection.execute(
+                    """
+                    SELECT task_status_id, task_id, revision,
+                           status, payload_json
+                    FROM task_statuses
+                    WHERE task_id = ?
+                    ORDER BY revision DESC
+                    LIMIT 1
+                    """,
+                    (response.task_id,),
+                ).fetchone()
+                if latest_status_row is None:
+                    raise KeyError(response.task_id)
+
+                latest_status_id, *latest_stored_status = latest_status_row
+                current = SQLiteTaskStatusRegistry._restore(
+                    latest_status_id,
+                    latest_stored_status,
+                )
+                if current.status is not TaskStatus.WAITING_USER:
+                    raise UserAnswerRequiresWaitingStatusError
+
+                expected_revision = current.revision + 1
+                if running_status.revision != expected_revision:
+                    raise NonSequentialTaskStatusRevisionError(
+                        response.task_id,
+                        expected_revision,
+                        running_status.revision,
+                    )
+                require_task_status_transition(
+                    current.status,
+                    running_status.status,
+                )
+
+                latest_action_row = connection.execute(
+                    """
+                    SELECT action_id
+                    FROM actions
+                    WHERE task_id = ?
+                    ORDER BY task_sequence DESC
+                    LIMIT 1
+                    """,
+                    (response.task_id,),
+                ).fetchone()
+                if (
+                    latest_action_row is None
+                    or latest_action_row[0] != response.question_action_id
+                ):
+                    raise UserAnswerQuestionNotCurrentError
+
+                connection.execute(
+                    """
+                    INSERT INTO user_responses (
+                        response_id,
+                        question_action_id,
+                        task_id,
+                        response_type,
+                        payload_json
+                    )
+                    VALUES (?, ?, ?, ?, ?)
+                    """,
+                    (
+                        response.response_id,
+                        response.question_action_id,
+                        response.task_id,
+                        response.response_type.value,
+                        response_payload_json,
+                    ),
+                )
+                connection.execute(
+                    """
+                    INSERT INTO task_statuses (
+                        task_status_id,
+                        task_id,
+                        revision,
+                        status,
+                        payload_json
+                    )
+                    VALUES (?, ?, ?, ?, ?)
+                    """,
+                    (
+                        running_status.task_status_id,
+                        running_status.task_id,
+                        running_status.revision,
+                        running_status.status.value,
+                        status_payload_json,
+                    ),
+                )
+        except sqlite3.IntegrityError:
+            self._raise_user_answer_running_conflict(
+                response,
+                running_status,
+            )
+
+    def _raise_user_answer_running_conflict(
+        self,
+        response: UserResponseRecord,
+        running_status: TaskStatusRecord,
+    ) -> None:
+        """事务回滚后把唯一约束冲突转为稳定领域错误。"""
+
+        with sqlite3.connect(self.database_path) as connection:
+            response_id_exists = connection.execute(
+                "SELECT 1 FROM user_responses WHERE response_id = ?",
+                (response.response_id,),
+            ).fetchone()
+            question_response_exists = connection.execute(
+                "SELECT 1 FROM user_responses WHERE question_action_id = ?",
+                (response.question_action_id,),
+            ).fetchone()
+            status_id_exists = connection.execute(
+                "SELECT 1 FROM task_statuses WHERE task_status_id = ?",
+                (running_status.task_status_id,),
+            ).fetchone()
+
+        if response_id_exists is not None:
+            raise DuplicateUserResponseIdError(response.response_id) from None
+        if question_response_exists is not None:
+            raise DuplicateQuestionResponseError(
+                response.question_action_id
+            ) from None
+        if status_id_exists is not None:
+            raise DuplicateTaskStatusIdError(
+                running_status.task_status_id
+            ) from None
+        raise RuntimeError("用户回答恢复违反未知的 SQLite 完整性约束")
 
     def get_task_view(self, task_id: str) -> TaskStateView:
         """组合不可变任务来源、当前状态和有序 Action 历史。"""
