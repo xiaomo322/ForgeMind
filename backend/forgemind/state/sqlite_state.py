@@ -35,6 +35,9 @@ from forgemind.state.sqlite_task_status_registry import (
     NonSequentialTaskStatusRevisionError,
     SQLiteTaskStatusRegistry,
 )
+from forgemind.state.sqlite_user_response_registry import (
+    SQLiteUserResponseRegistry,
+)
 
 
 class TaskStatusTaskMismatchError(ValueError):
@@ -59,11 +62,11 @@ class InvalidAskUserWaitingStatusError(ValueError):
 @dataclass(frozen=True, slots=True)
 class SQLiteForgeMindState:
     """持有一组连接到同一数据库且依赖关系正确的 Registry。"""
-
     database_path: Path
     tasks: SQLiteTaskRegistry
     task_statuses: SQLiteTaskStatusRegistry
     actions: SQLiteActionRegistry
+    user_responses: SQLiteUserResponseRegistry
     permission_requests: SQLitePermissionRequestRegistry
     permission_decisions: SQLitePermissionDecisionRegistry
     observations: SQLiteObservationRegistry
@@ -353,6 +356,7 @@ class SQLiteForgeMindState:
         raise RuntimeError("任务创建违反未知的 SQLite 完整性约束")
 
     @classmethod
+
     def open(cls, database_path: Path) -> Self:
         """打开数据库，并按依赖顺序建立完整的 State 入口。"""
 
@@ -363,6 +367,12 @@ class SQLiteForgeMindState:
         tasks = SQLiteTaskRegistry(resolved_database_path)
         task_statuses = SQLiteTaskStatusRegistry(resolved_database_path)
         actions = SQLiteActionRegistry(resolved_database_path)
+        user_responses = SQLiteUserResponseRegistry(
+            resolved_database_path,
+            actions,
+        )
+        # 第二步：用 resolved_database_path 和 actions 创建
+        # SQLiteUserResponseRegistry，保存为 user_responses。
         # 第三步：创建 PermissionRequest Registry，并传入 Action Registry。
         permission_requests = SQLitePermissionRequestRegistry(
             resolved_database_path,
@@ -384,6 +394,7 @@ class SQLiteForgeMindState:
             tasks=tasks,
             task_statuses=task_statuses,
             actions=actions,
+            user_responses=user_responses,
             permission_requests=permission_requests,
             permission_decisions=permission_decisions,
             observations=observations,
