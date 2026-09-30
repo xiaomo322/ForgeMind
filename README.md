@@ -93,6 +93,6 @@ docs/         # 01–16 正式设计文档和开发日志
 
 ## 当前学习进度
 
-当前学习 Agent 推理边界（更新于 2026-09-30）。五个 Tool V0.1 均已形成完整证据链；`ask_user` 从 Agent Decision、WAITING_USER、持久化用户响应到后续状态的两条链路已完成：ANSWER 原子恢复 RUNNING 并进入下一轮 Agent Context；CANCEL 原子进入终态 CANCELLED，不再启动 Agent 推理。供应商无关的单轮 Agent 入口只允许 RUNNING 任务读取权威 State、构造有限 Context、调用注入模型并严格解析输出；新增确定性 Runtime 分派器，把六种合法 Decision 交给唯一匹配的类型化处理器，ParseFailure 保持零执行副作用。下一步组合 Agent 单轮推理与 Runtime 分派。当前完整测试 529 项通过。详细设计演进见 `docs/06-数据结构设计.md`，逐步开发记录见 `docs/16-项目开发日志.md`。
+当前学习 Agent 推理边界（更新于 2026-09-30）。五个 Tool V0.1 均已形成完整证据链；`ask_user` 从 Agent Decision、WAITING_USER、持久化用户响应到后续状态的两条链路已完成：ANSWER 原子恢复 RUNNING 并进入下一轮 Agent Context；CANCEL 原子进入终态 CANCELLED，不再启动 Agent 推理。供应商无关的单轮 Agent 入口现已与确定性 Runtime 分派组合为可运行 Loop Step：真实 SQLite 端到端路径能够从 RUNNING Context 和模型 AskUserDecision 原子进入 WAITING_USER，非法模型输出保持 State 不变。下一步组装应用级 Runtime handlers，逐步接入 Tool Decision 的权限流程。当前完整测试 531 项通过。详细设计演进见 `docs/06-数据结构设计.md`，逐步开发记录见 `docs/16-项目开发日志.md`。
 
 每个切片只处理一个主要概念，并明确留出核心代码由用户先写；AI 提供脚手架、测试和基于真实错误的 Debug 支持。

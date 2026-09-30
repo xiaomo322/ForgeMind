@@ -91,3 +91,24 @@ State 与模型通过最小 `Protocol` 注入。单轮编排不依赖 SQLite 内
 `AgentDecisionParseFailure` 已移入 Schema 层，使 Agent Parser 与 Runtime
 Dispatcher 共同依赖稳定契约，避免 Runtime 反向依赖 Agent 实现。新增 8 项
 测试，相关回归 30 项、完整回归 529 项通过。
+
+## 7. 单轮 Agent Loop Step
+
+`run_agent_loop_step()` 将前两层组合为一次可调用步骤：先运行
+`run_agent_turn()` 取得模型输入、原始输出和解析结果，再调用
+`dispatch_agent_decision_result()`。它不复制 Context、解析或路由逻辑。
+
+`AgentLoopStepResult` 同时保存 `turn_result` 与 `dispatch_result`。前者用于
+回答模型看到了什么、返回了什么以及协议是否有效；后者用于回答 Runtime
+实际做了什么。两层结果不能压缩成一个模糊状态，否则无法区分模型服务失败、
+Decision 格式失败和 Runtime 处理失败。
+
+模型调用期间不持有 SQLite 写事务。模型思考前读取的 State 是输入快照，
+具体 Runtime handler 在产生副作用前必须重新检查当前任务状态、权限、目标和
+文件版本。这样既避免长时间锁库，也防止使用已经过期的 Agent 决策。
+
+首条真实端到端路径使用 SQLite State：RUNNING 任务进入 Agent Context，模型
+返回 AskUserDecision，Dispatcher 调用 ask_user Runtime 入口，最终原子写入
+AcceptedAskUserAction 与 revision 2 的 WAITING_USER。非法模型输出路径保持
+revision 1 的 RUNNING 且没有 Action。新增 2 项，相关回归 20 项、完整回归
+531 项通过。
