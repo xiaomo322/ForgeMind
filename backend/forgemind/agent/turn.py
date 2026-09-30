@@ -4,9 +4,11 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from forgemind.agent.decision_parser import (
+    parse_agent_decision_with_feedback,
+)
+from forgemind.schema.decisions import (
     AgentDecision,
     AgentDecisionParseFailure,
-    parse_agent_decision_with_feedback,
 )
 from forgemind.context.builder import build_agent_task_context
 from forgemind.context.messages import build_agent_turn_input

@@ -71,3 +71,23 @@ State 与模型通过最小 `Protocol` 注入。单轮编排不依赖 SQLite 内
 
 测试覆盖合法询问决策、非法模型输出、非 RUNNING 状态提前拦截以及模型调用
 异常透传。新增 4 项，相关回归 20 项、完整回归 521 项通过。
+
+## 6. Agent Decision 的确定性 Runtime 分派
+
+`dispatch_agent_decision()` 接收已经通过严格解析的 `AgentDecision`，依据
+具体 Pydantic 模型类型选择 ask_user 或五种 Tool 的唯一处理器。分派过程不再
+解析自然语言或路由字符串，不补全参数，也不直接拥有各 Tool 的专属执行依赖。
+
+六个必填处理器由泛型 `AgentDecisionHandlers[DispatchResult]` 表达。调用方
+负责把每个处理器连接到对应 Runtime 流程；遗漏处理器会在构造边界暴露，避免
+字典路由中的拼写错误或静默缺项。
+
+`dispatch_agent_decision_result()` 额外接收
+`AgentDecisionParseFailure`。解析失败时原样返回，任何处理器都不会调用，
+因此不会分配 action_id、登记 Action、请求权限或执行 Tool。未知动态类型会
+抛出 `UnsupportedAgentDecisionError`，不能落入默认工具。
+
+共享的 `ToolCallDecision`、`AgentDecision` 和
+`AgentDecisionParseFailure` 已移入 Schema 层，使 Agent Parser 与 Runtime
+Dispatcher 共同依赖稳定契约，避免 Runtime 反向依赖 Agent 实现。新增 8 项
+测试，相关回归 30 项、完整回归 529 项通过。

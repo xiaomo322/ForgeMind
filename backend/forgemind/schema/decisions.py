@@ -8,6 +8,7 @@ from forgemind.schema.read_file import ReadFileArguments
 from forgemind.schema.run_command import RunCommandArguments
 from forgemind.schema.run_tests import RunTestsArguments
 from forgemind.schema.search_code import SearchCodeArguments
+from forgemind.schema.validation import SchemaValidationError
 
 
 NonEmptyUserOption = Annotated[str, Field(min_length=1)]
@@ -82,3 +83,27 @@ class AskUserDecision(StrictContractModel):
     # 第四步：声明 options，类型为 AskUserOptions | None，默认值为 None。
     # 有明确选项时传不可变元组；自由文本问题不需要伪造选项。
     options: AskUserOptions | None = None
+
+
+# 共享契约放在 schema，而不是 parser 或 Runtime 实现中。Agent Parser
+# 和 Runtime Dispatcher 都依赖这里，避免两个业务层互相反向导入。
+ToolCallDecision = Annotated[
+    ReadFileToolCallDecision
+    | EditFileToolCallDecision
+    | RunTestsToolCallDecision
+    | RunCommandToolCallDecision
+    | SearchCodeToolCallDecision,
+    Field(discriminator="tool_name"),
+]
+
+AgentDecision = Annotated[
+    ToolCallDecision | AskUserDecision,
+    Field(discriminator="action_type"),
+]
+
+
+class AgentDecisionParseFailure(StrictContractModel):
+    """模型输出无法形成合法 Decision 时的稳定反馈契约。"""
+
+    outcome: Literal["invalid"] = "invalid"
+    issues: tuple[SchemaValidationError, ...] = Field(min_length=1)

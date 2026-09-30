@@ -1,45 +1,16 @@
 """把模型返回的原始 JSON 严格解析为 ForgeMind Decision。"""
 
-from typing import Annotated, Literal
+from pydantic import TypeAdapter, ValidationError
 
-from pydantic import Field, TypeAdapter, ValidationError
-
-from forgemind.schema.base import StrictContractModel
 from forgemind.schema.decisions import (
-    AskUserDecision,
-    EditFileToolCallDecision,
-    ReadFileToolCallDecision,
-    RunCommandToolCallDecision,
-    RunTestsToolCallDecision,
-    SearchCodeToolCallDecision,
+    AgentDecision,
+    AgentDecisionParseFailure,
+    ToolCallDecision,
 )
 from forgemind.schema.validation import (
-    SchemaValidationError,
     map_validation_error,
 )
 
-
-# 第一步：用“|”连接五种已有 Decision，形成 ToolCallDecision 联合类型；
-# 再使用 Annotated 和 Field(discriminator="tool_name") 指定分派字段。
-# 请把当前临时的单一类型替换为完整的带判别器联合类型。
-
-ToolCallDecision = Annotated[
-    ReadFileToolCallDecision
-    | EditFileToolCallDecision
-    | RunTestsToolCallDecision
-    | RunCommandToolCallDecision
-    | SearchCodeToolCallDecision,
-    Field(discriminator="tool_name"),
-]
-
-# 完整 AgentDecision 先按 action_type 区分 Tool 调用和用户询问；
-# ToolCallDecision 内部再按 tool_name 区分五种工具。
-# 第一步：把当前临时类型替换为带 action_type 判别器的
-# ToolCallDecision | AskUserDecision 联合类型。
-AgentDecision = Annotated[
-    ToolCallDecision | AskUserDecision,
-    Field(discriminator="action_type"),
-]
 
 # 第二步：构造 TypeAdapter，并把 ToolCallDecision 传给它。
 # TypeAdapter 让 Pydantic 能校验联合类型，而不需要再创建一层包装模型。
@@ -48,13 +19,6 @@ _TOOL_CALL_DECISION_ADAPTER = TypeAdapter(ToolCallDecision)
 
 # 第二步：构造针对 AgentDecision 的 TypeAdapter。
 _AGENT_DECISION_ADAPTER = TypeAdapter(AgentDecision)
-
-
-class AgentDecisionParseFailure(StrictContractModel):
-    """模型输出无法形成合法 Decision 时的稳定反馈。"""
-
-    outcome: Literal["invalid"] = "invalid"
-    issues: tuple[SchemaValidationError, ...] = Field(min_length=1)
 
 
 def parse_tool_call_decision(raw_response: str) -> ToolCallDecision:
