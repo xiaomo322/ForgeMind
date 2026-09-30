@@ -83,12 +83,13 @@ docs/         # 01–16 正式设计文档和开发日志
 - Runtime 可把 AskUserDecision 转换为带权威 task_id/action_id 的 AcceptedAskUserAction，尚未接入通用 Registry。
 - 内存 Action Registry 已使用两层 AcceptedAction 联合，Tool 与 AskUserAction 共用不可覆盖的 ID 空间。
 - 新建 SQLite Action Registry 已能保存和严格恢复 Tool/AskUserAction，并交叉核对通用索引列与完整 JSON。
+- 旧版 Tool 专用 actions 表会在事务中迁移为通用结构，保留记录、任务序号和外部引用名称。
 - State 为每个任务内的 Action 分配独立连续序号，恢复历史时按照登记顺序返回，不从随机 `action_id` 推断先后。
 
 统一任务 State 及完整 Agent Loop 尚未实现。
 
 ## 当前学习进度
 
-当前学习 Agent 推理边界（更新于 2026-09-29）。五个 Tool V0.1 均已形成完整证据链；`ask_user` 已完成 Decision、解析、Runtime 接受及新建 SQLite 数据库的持久化恢复。下一步安全迁移旧 actions 表，保留已有 Tool Action 和任务内序号。当前完整测试 458 项通过。详细设计演进见 `docs/06-数据结构设计.md`，逐步开发记录见 `docs/16-项目开发日志.md`。
+当前学习 Agent 推理边界（更新于 2026-09-30）。五个 Tool V0.1 均已形成完整证据链；`ask_user` 已完成 Decision、解析、Runtime 接受及 SQLite 新旧结构持久化。下一步让 TaskStateView 接受通用 Action，并禁止询问 Action 携带 Tool 权限或 Observation。当前完整测试 461 项通过。详细设计演进见 `docs/06-数据结构设计.md`，逐步开发记录见 `docs/16-项目开发日志.md`。
 
 每个切片只处理一个主要概念，并明确留出核心代码由用户先写；AI 提供脚手架、测试和基于真实错误的 Debug 支持。

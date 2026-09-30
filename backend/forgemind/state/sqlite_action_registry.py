@@ -33,23 +33,98 @@ class SQLiteActionRegistry:
         self._database_path = database_path
         self._database_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # 建表本身也在事务中完成。action_id 主键把内存 Registry 的
-        # “同一编号不可覆盖”规则下沉到磁盘层。
         with sqlite3.connect(self._database_path) as connection:
-            connection.execute(
-                """
-                CREATE TABLE IF NOT EXISTS actions (
-                    action_id TEXT PRIMARY KEY,
-                    task_id TEXT NOT NULL,
-                    task_sequence INTEGER NOT NULL,
-                    action_type TEXT NOT NULL,
-                    tool_name TEXT,
-                    payload_json TEXT NOT NULL,
-                    UNIQUE (task_id, task_sequence),
-                    FOREIGN KEY (task_id) REFERENCES tasks(task_id)
-                )
-                """
+            # 第一步：执行 PRAGMA table_info(actions)，并调用 fetchall()
+            # 得到 columns。
+            columns = connection.execute(
+                "PRAGMA table_info(actions)"
+            ).fetchall()
+
+            # 第二步：如果 columns 为空，调用
+            # self._create_actions_table(connection) 创建新版空表。
+            if not columns:
+                self._create_actions_table(connection)
+            else:
+                column_names = {
+                    row[1] for row in columns
+                }
+                if "action_type" not in column_names:
+                    self._migrate_legacy_actions_table(connection)
+
+            # 第三步：否则取得所有 row[1] 组成的列名集合；如果集合中没有
+            # "action_type"，调用 self._migrate_legacy_actions_table(connection)。
+            # 已经存在 action_type 时不执行任何迁移。
+
+    @staticmethod
+    def _create_actions_table(connection: sqlite3.Connection) -> None:
+        """创建能够保存所有 AcceptedAction 的新版空表。"""
+
+        connection.execute(
+            """
+            CREATE TABLE actions (
+                action_id TEXT PRIMARY KEY,
+                task_id TEXT NOT NULL,
+                task_sequence INTEGER NOT NULL,
+                action_type TEXT NOT NULL,
+                tool_name TEXT,
+                payload_json TEXT NOT NULL,
+                UNIQUE (task_id, task_sequence),
+                FOREIGN KEY (task_id) REFERENCES tasks(task_id)
             )
+            """
+        )
+
+    @staticmethod
+    def _migrate_legacy_actions_table(
+        connection: sqlite3.Connection,
+    ) -> None:
+        """把 Tool 专用旧表原子迁移为通用 Action 表。"""
+
+        # 第一步：迁移期间先取得写事务，复制、替换表必须整体成功或回滚。
+        connection.execute("BEGIN IMMEDIATE")
+
+        # 第二步：创建临时新版表。暂时不用 actions 名称，避免与旧表冲突。
+        connection.execute(
+            """
+            CREATE TABLE actions_v2 (
+                action_id TEXT PRIMARY KEY,
+                task_id TEXT NOT NULL,
+                task_sequence INTEGER NOT NULL,
+                action_type TEXT NOT NULL,
+                tool_name TEXT,
+                payload_json TEXT NOT NULL,
+                UNIQUE (task_id, task_sequence),
+                FOREIGN KEY (task_id) REFERENCES tasks(task_id)
+            )
+            """
+        )
+
+        # 第三步：复制旧表的全部事实。旧 Registry 只允许 Tool Action，
+        # 因此新增 action_type 使用确定的字面值 tool_call。
+        connection.execute(
+            """
+            INSERT INTO actions_v2 (
+                action_id,
+                task_id,
+                task_sequence,
+                action_type,
+                tool_name,
+                payload_json
+            )
+            SELECT
+                action_id,
+                task_id,
+                task_sequence,
+                'tool_call',
+                tool_name,
+                payload_json
+            FROM actions
+            """
+        )
+
+        # 第四步：只有复制成功后才删除旧表，再把临时表改为正式名称。
+        connection.execute("DROP TABLE actions")
+        connection.execute("ALTER TABLE actions_v2 RENAME TO actions")
 
     @property
     def database_path(self) -> Path:
