@@ -13,6 +13,7 @@ from forgemind.state.permission_request_registry import (
     UnknownPermissionRequestActionError,
 )
 from forgemind.state.sqlite_action_registry import SQLiteActionRegistry
+from forgemind.state.sqlite_connection import open_sqlite_connection
 
 
 _REQUEST_ADAPTER = TypeAdapter(PendingPermissionRequest)
@@ -53,7 +54,7 @@ class SQLitePermissionRequestRegistry:
                 "权限请求和 Action Registry 必须使用同一个数据库"
             )
 
-        with sqlite3.connect(self._database_path) as connection:
+        with open_sqlite_connection(self._database_path) as connection:
             connection.execute("PRAGMA foreign_keys = ON")
             connection.execute(
                 """
@@ -111,7 +112,7 @@ class SQLitePermissionRequestRegistry:
         payload_json = request.model_dump_json()
         # 第四步：事务中先执行 PRAGMA foreign_keys = ON，再用参数化 INSERT
         try:
-            with sqlite3.connect(self._database_path) as connection:
+            with open_sqlite_connection(self._database_path) as connection:
                 connection.execute("PRAGMA foreign_keys = ON")
                 connection.execute(
                     """
@@ -138,7 +139,7 @@ class SQLitePermissionRequestRegistry:
         # DuplicatePermissionRequestIdError；否则抛出
         # DuplicateActionPermissionRequestError(request.action_id)。
         except sqlite3.IntegrityError:
-            with sqlite3.connect(self._database_path) as connection:
+            with open_sqlite_connection(self._database_path) as connection:
                 duplicate_id = connection.execute(
                     """
                     SELECT 1
@@ -160,7 +161,7 @@ class SQLitePermissionRequestRegistry:
     def get(self, permission_request_id: str) -> PendingPermissionRequest:
         """读取并严格恢复一条待确认权限请求。"""
 
-        with sqlite3.connect(self._database_path) as connection:
+        with open_sqlite_connection(self._database_path) as connection:
             row = connection.execute(
                 """
                 SELECT task_id, action_id, tool_name, payload_json
@@ -198,7 +199,7 @@ class SQLitePermissionRequestRegistry:
 
         # 第一步：查询 permission_requests 表中 action_id 对应的
         # permission_request_id，并使用参数化 SQL。
-        with sqlite3.connect(self._database_path) as connection:
+        with open_sqlite_connection(self._database_path) as connection:
             row = connection.execute(
                 """
                 SELECT permission_request_id

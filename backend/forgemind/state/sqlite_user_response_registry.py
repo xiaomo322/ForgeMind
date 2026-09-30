@@ -9,6 +9,7 @@ from forgemind.runtime.user_responses import validate_user_response_for_question
 from forgemind.schema.actions import AcceptedAskUserAction
 from forgemind.schema.interactions import UserResponseRecord
 from forgemind.state.sqlite_action_registry import SQLiteActionRegistry
+from forgemind.state.sqlite_connection import open_sqlite_connection
 from forgemind.state.sqlite_permission_request_registry import (
     SQLiteRegistryDatabaseMismatchError,
 )
@@ -49,7 +50,7 @@ class SQLiteUserResponseRegistry:
                 "用户回答和 Action Registry 必须使用同一个数据库"
             )
 
-        with sqlite3.connect(self._database_path) as connection:
+        with open_sqlite_connection(self._database_path) as connection:
             connection.execute("PRAGMA foreign_keys = ON")
             connection.execute(
                 """
@@ -101,7 +102,7 @@ class SQLiteUserResponseRegistry:
         # with 事务，开启 foreign_keys，然后用参数化 INSERT
         # 写入 response_id、question_action_id、task_id、
         # response_type.value 和 payload_json。
-        with sqlite3.connect(self._database_path) as connection:
+        with open_sqlite_connection(self._database_path) as connection:
             connection.execute("PRAGMA foreign_keys = ON")
 
             try:
@@ -146,7 +147,7 @@ class SQLiteUserResponseRegistry:
     def get(self, response_id: str) -> UserResponseRecord:
         """按回答编号严格恢复记录。"""
 
-        with sqlite3.connect(self._database_path) as connection:
+        with open_sqlite_connection(self._database_path) as connection:
             row = connection.execute(
                 """
                 SELECT question_action_id, task_id, response_type, payload_json
@@ -181,7 +182,7 @@ class SQLiteUserResponseRegistry:
     ) -> UserResponseRecord:
         """按原问题编号恢复它的唯一回答。"""
 
-        with sqlite3.connect(self._database_path) as connection:
+        with open_sqlite_connection(self._database_path) as connection:
             row = connection.execute(
                 """
                 SELECT response_id

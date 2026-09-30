@@ -7,6 +7,7 @@ from pydantic import TypeAdapter, ValidationError
 
 from forgemind.schema.actions import AcceptedAction, SequencedActionRecord
 from forgemind.state.action_registry import DuplicateActionIdError
+from forgemind.state.sqlite_connection import open_sqlite_connection
 from forgemind.state.sqlite_task_registry import UnknownTaskIdError
 
 
@@ -33,7 +34,7 @@ class SQLiteActionRegistry:
         self._database_path = database_path
         self._database_path.parent.mkdir(parents=True, exist_ok=True)
 
-        with sqlite3.connect(self._database_path) as connection:
+        with open_sqlite_connection(self._database_path) as connection:
             # 第一步：执行 PRAGMA table_info(actions)，并调用 fetchall()
             # 得到 columns。
             columns = connection.execute(
@@ -151,7 +152,7 @@ class SQLiteActionRegistry:
             # INSERT INTO actions (action_id, task_id, tool_name, payload_json)
             # VALUES (?, ?, ?, ?)
             # 参数必须单独传入，不能拼接 SQL 字符串。
-            with sqlite3.connect(self._database_path) as connection:
+            with open_sqlite_connection(self._database_path) as connection:
                 connection.execute("PRAGMA foreign_keys = ON")
                 connection.execute("BEGIN IMMEDIATE")
 
@@ -213,7 +214,7 @@ class SQLiteActionRegistry:
     def get(self, action_id: str) -> AcceptedAction:
         """按编号读取 JSON，并通过严格联合类型重建 Action。"""
 
-        with sqlite3.connect(self._database_path) as connection:
+        with open_sqlite_connection(self._database_path) as connection:
             row = connection.execute(
                 """
                 SELECT task_id, action_type, tool_name, payload_json
@@ -231,7 +232,7 @@ class SQLiteActionRegistry:
     def list_for_task(self, task_id: str) -> tuple[SequencedActionRecord, ...]:
         """按 State 分配的任务内序号返回 Action，不按随机 ID 排序。"""
 
-        with sqlite3.connect(self._database_path) as connection:
+        with open_sqlite_connection(self._database_path) as connection:
             rows = connection.execute(
                 """
                 SELECT

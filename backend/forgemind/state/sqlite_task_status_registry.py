@@ -7,6 +7,7 @@ from pydantic import ValidationError
 
 from forgemind.runtime.task_status import require_task_status_transition
 from forgemind.schema.tasks import TaskStatus, TaskStatusRecord
+from forgemind.state.sqlite_connection import open_sqlite_connection
 from forgemind.state.sqlite_task_registry import UnknownTaskIdError
 
 
@@ -58,7 +59,7 @@ class SQLiteTaskStatusRegistry:
         self._database_path = database_path
         self._database_path.parent.mkdir(parents=True, exist_ok=True)
 
-        with sqlite3.connect(self._database_path) as connection:
+        with open_sqlite_connection(self._database_path) as connection:
             connection.execute("PRAGMA foreign_keys = ON")
             connection.execute(
                 """
@@ -84,7 +85,7 @@ class SQLiteTaskStatusRegistry:
         payload_json = status_record.model_dump_json()
 
         try:
-            with sqlite3.connect(self._database_path) as connection:
+            with open_sqlite_connection(self._database_path) as connection:
                 connection.execute("PRAGMA foreign_keys = ON")
                 # 先取得写锁，再读取上一版本，避免两个写入者同时看到
                 # 相同 revision 后都认为自己可以追加下一条。
@@ -173,7 +174,7 @@ class SQLiteTaskStatusRegistry:
     def get(self, task_status_id: str) -> TaskStatusRecord:
         """按状态编号恢复一条严格记录。"""
 
-        with sqlite3.connect(self._database_path) as connection:
+        with open_sqlite_connection(self._database_path) as connection:
             row = connection.execute(
                 """
                 SELECT task_id, revision, status, payload_json
@@ -191,7 +192,7 @@ class SQLiteTaskStatusRegistry:
     def get_current(self, task_id: str) -> TaskStatusRecord:
         """恢复任务最高 revision 的当前状态。"""
 
-        with sqlite3.connect(self._database_path) as connection:
+        with open_sqlite_connection(self._database_path) as connection:
             row = connection.execute(
                 """
                 SELECT task_status_id, task_id, revision, status, payload_json

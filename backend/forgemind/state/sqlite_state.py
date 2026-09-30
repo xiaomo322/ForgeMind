@@ -18,6 +18,7 @@ from forgemind.schema.tasks import (
 )
 from forgemind.state.sqlite_action_registry import SQLiteActionRegistry
 from forgemind.state.action_registry import DuplicateActionIdError
+from forgemind.state.sqlite_connection import open_sqlite_connection
 from forgemind.state.sqlite_observation_registry import (
     SQLiteObservationRegistry,
 )
@@ -135,7 +136,7 @@ class SQLiteForgeMindState:
         status_payload_json = waiting_status.model_dump_json()
 
         try:
-            with sqlite3.connect(self.database_path) as connection:
+            with open_sqlite_connection(self.database_path) as connection:
                 connection.execute("PRAGMA foreign_keys = ON")
                 connection.execute("BEGIN IMMEDIATE")
 
@@ -241,7 +242,7 @@ class SQLiteForgeMindState:
     ) -> None:
         """事务回滚后把唯一约束冲突转换为稳定领域错误。"""
 
-        with sqlite3.connect(self.database_path) as connection:
+        with open_sqlite_connection(self.database_path) as connection:
             action_exists = connection.execute(
                 "SELECT 1 FROM actions WHERE action_id = ?",
                 (action.action_id,),
@@ -325,7 +326,7 @@ class SQLiteForgeMindState:
         status_payload_json = next_status.model_dump_json()
 
         try:
-            with sqlite3.connect(self.database_path) as connection:
+            with open_sqlite_connection(self.database_path) as connection:
                 connection.execute("PRAGMA foreign_keys = ON")
                 connection.execute("BEGIN IMMEDIATE")
 
@@ -430,7 +431,7 @@ class SQLiteForgeMindState:
     ) -> None:
         """事务回滚后把唯一约束冲突转为稳定领域错误。"""
 
-        with sqlite3.connect(self.database_path) as connection:
+        with open_sqlite_connection(self.database_path) as connection:
             response_id_exists = connection.execute(
                 "SELECT 1 FROM user_responses WHERE response_id = ?",
                 (response.response_id,),
@@ -537,7 +538,7 @@ class SQLiteForgeMindState:
         try:
             # 第一步：用 self.database_path 打开一个连接，在 with 事务中
             # 启用 foreign_keys，并执行 BEGIN IMMEDIATE。
-            with sqlite3.connect(self.database_path) as connection:
+            with open_sqlite_connection(self.database_path) as connection:
                 connection.execute("PRAGMA foreign_keys = ON")
                 connection.execute("BEGIN IMMEDIATE")
 
@@ -591,7 +592,7 @@ class SQLiteForgeMindState:
     ) -> None:
         """在事务回滚后，把 SQLite 冲突映射为稳定领域错误。"""
 
-        with sqlite3.connect(self.database_path) as connection:
+        with open_sqlite_connection(self.database_path) as connection:
             task_exists = connection.execute(
                 "SELECT 1 FROM tasks WHERE task_id = ?",
                 (task.task_id,),

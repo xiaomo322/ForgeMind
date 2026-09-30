@@ -11,6 +11,7 @@ from forgemind.state.observation_registry import (
     UnknownActionIdError,
 )
 from forgemind.state.sqlite_action_registry import SQLiteActionRegistry
+from forgemind.state.sqlite_connection import open_sqlite_connection
 from forgemind.state.sqlite_permission_request_registry import (
     SQLiteRegistryDatabaseMismatchError,
 )
@@ -48,7 +49,7 @@ class SQLiteObservationRegistry:
                 "Observation 和 Action Registry 必须使用同一个数据库"
             )
 
-        with sqlite3.connect(self._database_path) as connection:
+        with open_sqlite_connection(self._database_path) as connection:
             connection.execute("PRAGMA foreign_keys = ON")
             connection.execute(
                 """
@@ -77,7 +78,7 @@ class SQLiteObservationRegistry:
         # 第三步：在事务中启用 foreign_keys，用参数化 INSERT 写入
         # action_id、status、payload_json。
         try:
-            with sqlite3.connect(self._database_path) as connection:
+            with open_sqlite_connection(self._database_path) as connection:
                 connection.execute("PRAGMA foreign_keys = ON")
                 connection.execute(
                     """
@@ -103,7 +104,7 @@ class SQLiteObservationRegistry:
     def get(self, action_id: str) -> TerminalObservation:
         """按 action_id 严格恢复唯一终态 Observation。"""
 
-        with sqlite3.connect(self._database_path) as connection:
+        with open_sqlite_connection(self._database_path) as connection:
             row = connection.execute(
                 """
                 SELECT status, payload_json

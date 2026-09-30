@@ -6,6 +6,7 @@ import sqlite3
 from pydantic import ValidationError
 
 from forgemind.schema.tasks import TaskRecord
+from forgemind.state.sqlite_connection import open_sqlite_connection
 
 
 class DuplicateTaskIdError(ValueError):
@@ -44,7 +45,7 @@ class SQLiteTaskRegistry:
         self._database_path = database_path
         self._database_path.parent.mkdir(parents=True, exist_ok=True)
 
-        with sqlite3.connect(self._database_path) as connection:
+        with open_sqlite_connection(self._database_path) as connection:
             connection.execute(
                 """
                 CREATE TABLE IF NOT EXISTS tasks (
@@ -69,7 +70,7 @@ class SQLiteTaskRegistry:
         # 第二步：在 sqlite3.connect(...) 的 with 事务中执行参数化 INSERT，
         # 写入 task_id、project_root、payload_json；不能拼接 SQL 字符串。
         try:
-            with sqlite3.connect(self._database_path) as connection:
+            with open_sqlite_connection(self._database_path) as connection:
                 connection.execute(
                     """
                     INSERT INTO tasks (
@@ -93,7 +94,7 @@ class SQLiteTaskRegistry:
     def get(self, task_id: str) -> TaskRecord:
         """按编号恢复任务，并核对独立索引列与 JSON。"""
 
-        with sqlite3.connect(self._database_path) as connection:
+        with open_sqlite_connection(self._database_path) as connection:
             row = connection.execute(
                 """
                 SELECT project_root, payload_json

@@ -12,6 +12,7 @@ from forgemind.state.permission_decision_registry import (
     PermissionDecisionRequestMismatchError,
     UnknownPermissionRequestIdError,
 )
+from forgemind.state.sqlite_connection import open_sqlite_connection
 from forgemind.state.sqlite_permission_request_registry import (
     SQLitePermissionRequestRegistry,
     SQLiteRegistryDatabaseMismatchError,
@@ -49,7 +50,7 @@ class SQLitePermissionDecisionRegistry:
                 "权限决定和权限请求 Registry 必须使用同一个数据库"
             )
 
-        with sqlite3.connect(self._database_path) as connection:
+        with open_sqlite_connection(self._database_path) as connection:
             connection.execute("PRAGMA foreign_keys = ON")
             connection.execute(
                 """
@@ -91,7 +92,7 @@ class SQLitePermissionDecisionRegistry:
         payload_json = decision.model_dump_json()
 
         # 第三步：序列化 decision，并在事务中启用 foreign_keys 后 INSERT。
-        with sqlite3.connect(self._database_path) as connection:
+        with open_sqlite_connection(self._database_path) as connection:
             connection.execute("PRAGMA foreign_keys = ON")
 
             try:
@@ -140,7 +141,7 @@ class SQLitePermissionDecisionRegistry:
     def get(self, permission_decision_id: str) -> PermissionDecisionRecord:
         """按决定编号严格恢复记录。"""
 
-        with sqlite3.connect(self._database_path) as connection:
+        with open_sqlite_connection(self._database_path) as connection:
             row = connection.execute(
                 """
                 SELECT permission_request_id, task_id, action_id,
@@ -184,7 +185,7 @@ class SQLitePermissionDecisionRegistry:
     ) -> PermissionDecisionRecord:
         """按询问编号恢复它唯一的最终用户决定。"""
 
-        with sqlite3.connect(self._database_path) as connection:
+        with open_sqlite_connection(self._database_path) as connection:
             row = connection.execute(
                 """
                 SELECT permission_decision_id
