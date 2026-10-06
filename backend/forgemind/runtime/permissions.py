@@ -185,6 +185,35 @@ def create_and_register_pending_run_tests_permission_request(
     return pending
 
 
+def build_pending_run_tests_permission_request(
+    action: AcceptedRunTestsToolAction,
+    permission_check: PermissionCheckResult,
+    *,
+    next_permission_request_id: PermissionRequestIdFactory,
+) -> PendingRunTestsPermissionRequest:
+    """构造由外层 SQLite 事务登记的 run_tests 权限请求。"""
+
+    if permission_check.action_id != action.action_id:
+        raise PermissionCheckActionMismatchError(
+            "权限检查结果与当前 run_tests Action 不一致"
+        )
+    if permission_check.outcome is not PermissionCheckOutcome.CONFIRMATION_REQUIRED:
+        raise PermissionOutcomeNotConfirmationRequiredError(
+            "只有 confirmation_required 能创建待确认权限请求"
+        )
+    return PendingRunTestsPermissionRequest(
+        permission_request_id=next_permission_request_id(),
+        task_id=action.task_id,
+        action_id=action.action_id,
+        status="pending",
+        action_type=action.action_type,
+        tool_name=action.tool_name,
+        arguments=action.arguments,
+        reason=permission_check.reason,
+        basis_ids=permission_check.basis_ids,
+    )
+
+
 def create_and_register_pending_run_command_permission_request(
     action: AcceptedRunCommandToolAction,
     permission_check: PermissionCheckResult,
@@ -222,6 +251,35 @@ def create_and_register_pending_run_command_permission_request(
     # 第四步：先把 pending 登记进 State，再返回同一个对象。
     requests.register(pending)
     return pending
+
+
+def build_pending_run_command_permission_request(
+    action: AcceptedRunCommandToolAction,
+    permission_check: PermissionCheckResult,
+    *,
+    next_permission_request_id: PermissionRequestIdFactory,
+) -> PendingRunCommandPermissionRequest:
+    """构造由外层 SQLite 事务登记的 run_command 权限请求。"""
+
+    if permission_check.action_id != action.action_id:
+        raise PermissionCheckActionMismatchError(
+            "权限检查结果与当前 run_command Action 不一致"
+        )
+    if permission_check.outcome is not PermissionCheckOutcome.CONFIRMATION_REQUIRED:
+        raise PermissionOutcomeNotConfirmationRequiredError(
+            "只有 confirmation_required 能创建待确认权限请求"
+        )
+    return PendingRunCommandPermissionRequest(
+        permission_request_id=next_permission_request_id(),
+        task_id=action.task_id,
+        action_id=action.action_id,
+        status="pending",
+        action_type=action.action_type,
+        tool_name=action.tool_name,
+        arguments=action.arguments,
+        reason=permission_check.reason,
+        basis_ids=permission_check.basis_ids,
+    )
 def resolve_registered_permission_decision(
     permission_decision_id: str,
     *,

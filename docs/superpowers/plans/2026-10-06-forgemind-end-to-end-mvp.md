@@ -78,12 +78,12 @@
 - Produces handlers with the same Decision-only callable shape as existing Dispatcher handlers.
 - Produces generic approve/reject entrypoints keyed by `permission_request_id`.
 
-- [ ] Test both Decisions atomically enter WAITING_USER without executing subprocesses.
-- [ ] Implement deterministic confirmation policies and pure pending request builders.
-- [ ] Implement handlers using `record_tool_permission_waiting`.
-- [ ] Test approval executes the persisted Action and records actual subprocess outcomes.
-- [ ] Test rejection reuses the existing generic rejection path.
-- [ ] Run focused/full tests; commit `feat: execute approved test and command actions`.
+- [x] Test both Decisions atomically enter WAITING_USER without executing subprocesses.
+- [x] Implement deterministic confirmation policies and pure pending request builders.
+- [x] Implement handlers using `record_tool_permission_waiting`.
+- [x] Test approval executes the persisted Action and records actual subprocess outcomes.
+- [x] Test rejection reuses the existing generic rejection path.
+- [x] Run focused/full tests; commit `feat: execute approved test and command actions`.
 
 ### Task 4: 显式完成 Decision 与统一 handlers
 
