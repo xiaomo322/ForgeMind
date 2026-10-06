@@ -8,6 +8,7 @@ from forgemind.schema.actions import (
     AcceptedRunCommandToolAction,
     AcceptedRunTestsToolAction,
     AcceptedSearchCodeToolAction,
+    AcceptedCompletionAction,
 )
 from forgemind.schema.decisions import (
     AskUserDecision,
@@ -16,6 +17,7 @@ from forgemind.schema.decisions import (
     RunCommandToolCallDecision,
     RunTestsToolCallDecision,
     SearchCodeToolCallDecision,
+    CompleteTaskDecision,
 )
 from forgemind.state.action_registry import (
     ActionRegistryWriter,
@@ -31,6 +33,23 @@ class ActionIdAllocationError(RuntimeError):
     def __init__(self, attempts: int) -> None:
         self.attempts = attempts
         super().__init__(f"连续 {attempts} 次生成了重复 action_id")
+
+
+def accept_complete_task_decision(
+    decision: CompleteTaskDecision,
+    *,
+    task_id: str,
+    next_action_id: ActionIdFactory = new_action_id,
+) -> AcceptedCompletionAction:
+    """为完成 Decision 分配 Runtime 权威编号。"""
+
+    return AcceptedCompletionAction(
+        action_id=next_action_id(),
+        task_id=task_id,
+        action_type=decision.action_type,
+        reason=decision.reason,
+        summary=decision.summary,
+    )
 
 
 def accept_ask_user_decision(

@@ -295,10 +295,7 @@ class SQLiteActionRegistry:
                 action.action_type == "tool_call"
                 and action.tool_name != stored_tool_name
             )
-            or (
-                action.action_type == "ask_user"
-                and stored_tool_name is not None
-            )
+            or (action.action_type != "tool_call" and stored_tool_name is not None)
         ):
             raise CorruptStoredActionError(action_id)
 

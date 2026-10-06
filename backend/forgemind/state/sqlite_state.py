@@ -7,7 +7,11 @@ from typing import Self
 
 from forgemind.runtime.task_status import require_task_status_transition
 from forgemind.runtime.user_responses import validate_user_response_for_question
-from forgemind.schema.actions import AcceptedAskUserAction, AcceptedToolAction
+from forgemind.schema.actions import (
+    AcceptedAskUserAction,
+    AcceptedCompletionAction,
+    AcceptedToolAction,
+)
 from forgemind.schema.execution import EditExecutionPlan
 from forgemind.schema.interactions import UserResponseRecord, UserResponseType
 from forgemind.schema.observations import (
@@ -163,6 +167,14 @@ class ExecutionResultNotCurrentError(ValueError):
     """执行结果不属于任务的最新 Action。"""
 
 
+class CompletionRequiresRunningStatusError(ValueError):
+    """只有 RUNNING 任务能够提交完成事实。"""
+
+
+class CompletionHasPendingActionError(ValueError):
+    """最新 Action 尚无终态或回答，任务不能完成。"""
+
+
 class UserAnswerStatusTaskMismatchError(ValueError):
     """用户回答与恢复状态没有引用同一任务。"""
 
@@ -215,6 +227,110 @@ class SQLiteForgeMindState:
     permission_decisions: SQLitePermissionDecisionRegistry
     edit_execution_plans: SQLiteEditExecutionPlanRegistry
     observations: SQLiteObservationRegistry
+
+    def record_task_completion(
+        self,
+        action: AcceptedCompletionAction,
+        completed_status: TaskStatusRecord,
+    ) -> None:
+        """原子追加完成 Action 并把任务转换为 COMPLETED。"""
+
+        if action.task_id != completed_status.task_id:
+            raise TaskStatusTaskMismatchError(action.task_id, completed_status.task_id)
+        if completed_status.status is not TaskStatus.COMPLETED:
+            raise ValueError("完成 Action 必须与 COMPLETED 状态一起登记")
+        try:
+            with open_sqlite_connection(self.database_path) as connection:
+                connection.execute("PRAGMA foreign_keys = ON")
+                connection.execute("BEGIN IMMEDIATE")
+                latest_status_row = connection.execute(
+                    """
+                    SELECT task_status_id, task_id, revision, status, payload_json
+                    FROM task_statuses WHERE task_id = ?
+                    ORDER BY revision DESC LIMIT 1
+                    """,
+                    (action.task_id,),
+                ).fetchone()
+                if latest_status_row is None:
+                    raise KeyError(action.task_id)
+                latest_status_id, *stored_status = latest_status_row
+                current = SQLiteTaskStatusRegistry._restore(
+                    latest_status_id, stored_status
+                )
+                if current.status is not TaskStatus.RUNNING:
+                    raise CompletionRequiresRunningStatusError
+                if completed_status.revision != current.revision + 1:
+                    raise NonSequentialTaskStatusRevisionError(
+                        action.task_id,
+                        current.revision + 1,
+                        completed_status.revision,
+                    )
+                require_task_status_transition(current.status, TaskStatus.COMPLETED)
+
+                latest_action = connection.execute(
+                    """
+                    SELECT action_id, action_type FROM actions
+                    WHERE task_id = ? ORDER BY task_sequence DESC LIMIT 1
+                    """,
+                    (action.task_id,),
+                ).fetchone()
+                if latest_action is not None:
+                    latest_action_id, latest_action_type = latest_action
+                    table = (
+                        "user_responses"
+                        if latest_action_type == "ask_user"
+                        else "observations"
+                    )
+                    column = (
+                        "question_action_id"
+                        if latest_action_type == "ask_user"
+                        else "action_id"
+                    )
+                    terminal = connection.execute(
+                        f"SELECT 1 FROM {table} WHERE {column} = ?",
+                        (latest_action_id,),
+                    ).fetchone()
+                    if terminal is None:
+                        raise CompletionHasPendingActionError
+
+                sequence = connection.execute(
+                    """
+                    SELECT COALESCE(MAX(task_sequence), 0) + 1
+                    FROM actions WHERE task_id = ?
+                    """,
+                    (action.task_id,),
+                ).fetchone()[0]
+                connection.execute(
+                    """
+                    INSERT INTO actions (
+                        action_id, task_id, task_sequence,
+                        action_type, tool_name, payload_json
+                    ) VALUES (?, ?, ?, ?, NULL, ?)
+                    """,
+                    (
+                        action.action_id,
+                        action.task_id,
+                        sequence,
+                        action.action_type,
+                        action.model_dump_json(),
+                    ),
+                )
+                connection.execute(
+                    """
+                    INSERT INTO task_statuses (
+                        task_status_id, task_id, revision, status, payload_json
+                    ) VALUES (?, ?, ?, ?, ?)
+                    """,
+                    (
+                        completed_status.task_status_id,
+                        completed_status.task_id,
+                        completed_status.revision,
+                        completed_status.status.value,
+                        completed_status.model_dump_json(),
+                    ),
+                )
+        except sqlite3.IntegrityError:
+            self._raise_ask_user_waiting_conflict(action, completed_status)
 
     def record_permission_approval_executing(
         self,

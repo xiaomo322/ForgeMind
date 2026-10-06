@@ -88,6 +88,19 @@ class ActionStateView(StrictContractModel):
     def require_matching_observation(self) -> Self:
         """权限链和 Observation 必须属于这一条 Action。"""
 
+        if self.action.action_type == "complete":
+            if any(
+                value is not None
+                for value in (
+                    self.user_response,
+                    self.permission_request,
+                    self.permission_decision,
+                    self.observation,
+                )
+            ):
+                raise ValueError("Complete Action 不能包含后续交互或 Tool 结果")
+            return self
+
         # 第一步：如果 self.action.action_type == "ask_user"，检查
         # permission_request 和 permission_decision 是否都为 None；否则抛出
         # ValueError("AskUser Action 不能包含 Tool 权限记录")。

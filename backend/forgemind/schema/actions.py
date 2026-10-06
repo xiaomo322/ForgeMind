@@ -93,11 +93,21 @@ class AcceptedAskUserAction(StrictContractModel):
     options: AskUserOptions | None = None
 
 
+class AcceptedCompletionAction(StrictContractModel):
+    """Runtime 接受完成 Decision 后保存的任务结束事实。"""
+
+    action_id: str = Field(min_length=1)
+    task_id: str = Field(min_length=1)
+    action_type: Literal["complete"]
+    reason: str = Field(min_length=1)
+    summary: str = Field(min_length=1)
+
+
 # 第二步：建立 AcceptedAction，联合 AcceptedToolAction 和
 # AcceptedAskUserAction，并用 action_type 作为外层判别器。
 # 当前临时类型只包含 Tool，请替换为完整的 Annotated 联合。
 AcceptedAction = Annotated[
-    AcceptedToolAction | AcceptedAskUserAction,
+    AcceptedToolAction | AcceptedAskUserAction | AcceptedCompletionAction,
     Field(discriminator="action_type"),
 ]
 

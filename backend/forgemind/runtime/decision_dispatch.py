@@ -13,10 +13,15 @@ from forgemind.schema.decisions import (
     RunCommandToolCallDecision,
     RunTestsToolCallDecision,
     SearchCodeToolCallDecision,
+    CompleteTaskDecision,
 )
 
 
 DispatchResult = TypeVar("DispatchResult")
+
+
+def _missing_complete_handler(_: CompleteTaskDecision) -> object:
+    raise RuntimeError("AgentDecisionHandlers 尚未配置 complete 处理器")
 
 
 @dataclass(frozen=True, slots=True)
@@ -29,6 +34,7 @@ class AgentDecisionHandlers(Generic[DispatchResult]):
     edit_file: Callable[[EditFileToolCallDecision], DispatchResult]
     run_tests: Callable[[RunTestsToolCallDecision], DispatchResult]
     run_command: Callable[[RunCommandToolCallDecision], DispatchResult]
+    complete: Callable[[CompleteTaskDecision], DispatchResult] = _missing_complete_handler
 
 
 class UnsupportedAgentDecisionError(TypeError):
@@ -62,6 +68,8 @@ def dispatch_agent_decision(
         return handlers.run_tests(decision)
     if isinstance(decision, RunCommandToolCallDecision):
         return handlers.run_command(decision)
+    if isinstance(decision, CompleteTaskDecision):
+        return handlers.complete(decision)
 
     # 正常类型路径不可到达；显式错误用于阻止调用方用 cast 或动态对象
     # 绕过解析边界后静默落入错误工具。

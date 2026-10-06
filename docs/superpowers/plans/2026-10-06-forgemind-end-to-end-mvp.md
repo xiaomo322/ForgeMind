@@ -104,11 +104,11 @@
 - Produces: `complete_task(...)` that atomically saves AcceptedCompletionAction and COMPLETED.
 - Produces: `build_runtime_handlers(task_id, state)`.
 
-- [ ] Add strict parser/dispatch tests for complete while preserving six existing variants.
-- [ ] Add AcceptedCompletionAction and SQLite serialization coverage.
-- [ ] Implement atomic completion only from RUNNING and only when no latest Action lacks a terminal outcome or answer.
-- [ ] Build handlers factory for ask/read/search/edit/tests/command/complete.
-- [ ] Run focused/full tests; commit `feat: complete tasks through runtime decision`.
+- [x] Add strict parser/dispatch tests for complete while preserving six existing variants.
+- [x] Add AcceptedCompletionAction and SQLite serialization coverage.
+- [x] Implement atomic completion only from RUNNING and only when no latest Action lacks a terminal outcome or answer.
+- [x] Build handlers factory for ask/read/search/edit/tests/command/complete.
+- [x] Run focused/full tests; commit `feat: complete tasks through runtime decision`.
 
 ### Task 5: 多轮应用服务与 CLI
 

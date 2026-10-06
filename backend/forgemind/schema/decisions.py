@@ -85,6 +85,14 @@ class AskUserDecision(StrictContractModel):
     options: AskUserOptions | None = None
 
 
+class CompleteTaskDecision(StrictContractModel):
+    """Agent 基于现有证据提出任务已经完成。"""
+
+    action_type: Literal["complete"]
+    reason: str = Field(min_length=1)
+    summary: str = Field(min_length=1)
+
+
 # 共享契约放在 schema，而不是 parser 或 Runtime 实现中。Agent Parser
 # 和 Runtime Dispatcher 都依赖这里，避免两个业务层互相反向导入。
 ToolCallDecision = Annotated[
@@ -97,7 +105,7 @@ ToolCallDecision = Annotated[
 ]
 
 AgentDecision = Annotated[
-    ToolCallDecision | AskUserDecision,
+    ToolCallDecision | AskUserDecision | CompleteTaskDecision,
     Field(discriminator="action_type"),
 ]
 
