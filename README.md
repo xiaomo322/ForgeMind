@@ -88,6 +88,7 @@ docs/         # 01–16 正式设计文档和开发日志
 - `search_code` 应用级 handler 已把模型 Decision、Runtime 权威编号、SQLite Action、受限 Tool 执行和 SQLite Observation 连接为单轮闭环，并在副作用前重新检查任务仍为 RUNNING。
 - `read_file` 应用级 handler 已接入同一单轮闭环；分段结果的真实内容、版本与 `eof=false` 会持久化供下一轮 Agent 使用。
 - `edit_file` 的确定性权限策略会为每个具体 Action 生成待确认快照；SQLite State 已能在一个事务中原子保存 Action、权限请求与 `WAITING_USER` 状态，冲突时三者整体回滚。
+- `edit_file` 应用级 handler 已接入 Agent Loop；模型提出修改后只保存待确认事实并暂停，用户批准前不会修改文件或生成 Observation。
 - Runtime 可把 AskUserDecision 转换为带权威 task_id/action_id 的 AcceptedAskUserAction，尚未接入通用 Registry。
 - 内存 Action Registry 已使用两层 AcceptedAction 联合，Tool 与 AskUserAction 共用不可覆盖的 ID 空间。
 - 新建 SQLite Action Registry 已能保存和严格恢复 Tool/AskUserAction，并交叉核对通用索引列与完整 JSON。
@@ -101,6 +102,6 @@ docs/         # 01–16 正式设计文档和开发日志
 
 ## 当前学习进度
 
-当前学习真实模型进入 Agent Loop 的边界（更新于 2026-10-06）。五个 Tool V0.1 均已形成完整证据链；`ask_user` 从 Agent Decision、WAITING_USER、持久化用户响应到后续状态的两条链路已完成。供应商无关的单轮 Agent 入口现已与确定性 Runtime 分派组合为可运行 Loop Step。模型 system 消息包含由严格 `AgentDecision` 自动生成的 JSON Schema，OpenAI 兼容适配器从 `config/model.toml` 和环境变量建立真实 DeepSeek 客户端。安全冒烟入口已取得真实 `search_code` JSON 并通过 Parser。`search_code` 与 `read_file` 现已接入应用级 handler。`edit_file` 已完成逐 Action 确认策略、无副作用权限请求构造，以及 Action、请求、`WAITING_USER` 的 SQLite 原子写入；下一步组装应用级 handler，使模型的修改决策先暂停等待用户确认。排除独立 FastAPI 学习文件后，ForgeMind 测试 563 项通过；FastAPI 学习测试的既有差异仍未纳入本功能。详细设计演进见 `docs/06-数据结构设计.md`，逐步开发记录见 `docs/16-项目开发日志.md`。
+当前学习真实模型进入 Agent Loop 的边界（更新于 2026-10-06）。五个 Tool V0.1 均已形成完整证据链；`ask_user` 从 Agent Decision、WAITING_USER、持久化用户响应到后续状态的两条链路已完成。供应商无关的单轮 Agent 入口现已与确定性 Runtime 分派组合为可运行 Loop Step。模型 system 消息包含由严格 `AgentDecision` 自动生成的 JSON Schema，OpenAI 兼容适配器从 `config/model.toml` 和环境变量建立真实 DeepSeek 客户端。安全冒烟入口已取得真实 `search_code` JSON 并通过 Parser。`search_code` 与 `read_file` 现已接入应用级 handler。`edit_file` 已完成逐 Action 确认策略、原子权限等待和 Agent Loop handler；模型提出修改后任务进入 `WAITING_USER`，批准前文件保持不变且没有 Observation。下一步实现用户批准/拒绝后的精确恢复流程。排除独立 FastAPI 学习文件后，ForgeMind 测试 567 项通过；FastAPI 学习测试的既有差异仍未纳入本功能。详细设计演进见 `docs/06-数据结构设计.md`，逐步开发记录见 `docs/16-项目开发日志.md`。
 
 每个切片只处理一个主要概念，并明确留出核心代码由用户先写；AI 提供脚手架、测试和基于真实错误的 Debug 支持。

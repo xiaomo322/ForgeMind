@@ -15,6 +15,12 @@ def new_task_status_id() -> str:
     return f"task_status_{uuid4()}"
 
 
+def new_permission_request_id() -> str:
+    """生成供 Runtime 使用的权限请求标识。"""
+
+    return f"permission_request_{uuid4()}"
+
+
 def new_user_response_id() -> str:
     """生成供 Runtime 使用的用户回答标识。"""
 
