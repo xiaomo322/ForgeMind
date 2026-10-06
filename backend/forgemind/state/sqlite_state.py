@@ -7,8 +7,9 @@ from typing import Self
 
 from forgemind.runtime.task_status import require_task_status_transition
 from forgemind.runtime.user_responses import validate_user_response_for_question
-from forgemind.schema.actions import AcceptedAskUserAction
+from forgemind.schema.actions import AcceptedAskUserAction, AcceptedToolAction
 from forgemind.schema.interactions import UserResponseRecord, UserResponseType
+from forgemind.schema.permissions import PendingPermissionRequest
 from forgemind.schema.tasks import (
     ActionStateView,
     TaskRecord,
@@ -27,6 +28,11 @@ from forgemind.state.sqlite_permission_decision_registry import (
 )
 from forgemind.state.sqlite_permission_request_registry import (
     SQLitePermissionRequestRegistry,
+)
+from forgemind.state.permission_request_registry import (
+    DuplicateActionPermissionRequestError,
+    DuplicatePermissionRequestIdError,
+    PermissionRequestActionSnapshotMismatchError,
 )
 from forgemind.state.sqlite_task_registry import (
     DuplicateTaskIdError,
@@ -66,6 +72,14 @@ class AskUserWaitingTaskMismatchError(ValueError):
 
 class InvalidAskUserWaitingStatusError(ValueError):
     """询问 Action 只能与 WAITING_USER 状态一起登记。"""
+
+
+class ToolPermissionWaitingTaskMismatchError(ValueError):
+    """Tool Action、权限请求和等待状态没有引用同一任务。"""
+
+
+class InvalidToolPermissionWaitingStatusError(ValueError):
+    """待确认 Tool Action 只能与 WAITING_USER 状态一起登记。"""
 
 
 class UserAnswerStatusTaskMismatchError(ValueError):
@@ -119,6 +133,216 @@ class SQLiteForgeMindState:
     permission_requests: SQLitePermissionRequestRegistry
     permission_decisions: SQLitePermissionDecisionRegistry
     observations: SQLiteObservationRegistry
+
+    def record_tool_permission_waiting(
+        self,
+        action: AcceptedToolAction,
+        permission_request: PendingPermissionRequest,
+        waiting_status: TaskStatusRecord,
+    ) -> None:
+        """原子登记 Tool Action、权限请求和 WAITING_USER 状态。"""
+
+        # 第一步：三个对象必须属于同一个任务；否则它们不能组成一条
+        # 可追溯的权限链。
+        if not (
+            action.task_id
+            == permission_request.task_id
+            == waiting_status.task_id
+        ):
+            raise ToolPermissionWaitingTaskMismatchError
+
+        # 第二步：用户将要确认的请求必须是当前 Action 的完整快照。
+        if (
+            permission_request.action_id != action.action_id
+            or permission_request.action_type != action.action_type
+            or permission_request.tool_name != action.tool_name
+            or permission_request.arguments != action.arguments
+        ):
+            raise PermissionRequestActionSnapshotMismatchError(
+                action.action_id
+            )
+
+        # 第三步：创建权限请求后任务必须暂停，不能继续让 Agent 产生行动。
+        if waiting_status.status is not TaskStatus.WAITING_USER:
+            raise InvalidToolPermissionWaitingStatusError
+
+        action_payload_json = action.model_dump_json()
+        request_payload_json = permission_request.model_dump_json()
+        status_payload_json = waiting_status.model_dump_json()
+
+        try:
+            with open_sqlite_connection(self.database_path) as connection:
+                connection.execute("PRAGMA foreign_keys = ON")
+                # 取得写锁后，其他写事务不能在状态检查和 INSERT 之间
+                # 插入新事实，避免两个 Runtime 同时接受下一步。
+                connection.execute("BEGIN IMMEDIATE")
+
+                task_row = connection.execute(
+                    "SELECT 1 FROM tasks WHERE task_id = ?",
+                    (action.task_id,),
+                ).fetchone()
+                if task_row is None:
+                    from forgemind.state.sqlite_task_registry import (
+                        UnknownTaskIdError,
+                    )
+
+                    raise UnknownTaskIdError(action.task_id)
+
+                # 必须在写事务内重新取得最新状态，不能相信事务外读取的
+                # 旧快照。
+                latest_row = connection.execute(
+                    """
+                    SELECT task_status_id, task_id, revision,
+                           status, payload_json
+                    FROM task_statuses
+                    WHERE task_id = ?
+                    ORDER BY revision DESC
+                    LIMIT 1
+                    """,
+                    (action.task_id,),
+                ).fetchone()
+                if latest_row is None:
+                    raise KeyError(action.task_id)
+
+                latest_status_id, *latest_stored_record = latest_row
+                current = SQLiteTaskStatusRegistry._restore(
+                    latest_status_id,
+                    latest_stored_record,
+                )
+                expected_revision = current.revision + 1
+                if waiting_status.revision != expected_revision:
+                    raise NonSequentialTaskStatusRevisionError(
+                        action.task_id,
+                        expected_revision,
+                        waiting_status.revision,
+                    )
+                require_task_status_transition(
+                    current.status,
+                    waiting_status.status,
+                )
+
+                sequence_row = connection.execute(
+                    """
+                    SELECT COALESCE(MAX(task_sequence), 0) + 1
+                    FROM actions
+                    WHERE task_id = ?
+                    """,
+                    (action.task_id,),
+                ).fetchone()
+                next_sequence = sequence_row[0]
+
+                connection.execute(
+                    """
+                    INSERT INTO actions (
+                        action_id,
+                        task_id,
+                        task_sequence,
+                        action_type,
+                        tool_name,
+                        payload_json
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        action.action_id,
+                        action.task_id,
+                        next_sequence,
+                        action.action_type,
+                        action.tool_name,
+                        action_payload_json,
+                    ),
+                )
+                connection.execute(
+                    """
+                    INSERT INTO permission_requests (
+                        permission_request_id,
+                        task_id,
+                        action_id,
+                        tool_name,
+                        payload_json
+                    )
+                    VALUES (?, ?, ?, ?, ?)
+                    """,
+                    (
+                        permission_request.permission_request_id,
+                        permission_request.task_id,
+                        permission_request.action_id,
+                        permission_request.tool_name,
+                        request_payload_json,
+                    ),
+                )
+                connection.execute(
+                    """
+                    INSERT INTO task_statuses (
+                        task_status_id,
+                        task_id,
+                        revision,
+                        status,
+                        payload_json
+                    )
+                    VALUES (?, ?, ?, ?, ?)
+                    """,
+                    (
+                        waiting_status.task_status_id,
+                        waiting_status.task_id,
+                        waiting_status.revision,
+                        waiting_status.status.value,
+                        status_payload_json,
+                    ),
+                )
+        except sqlite3.IntegrityError:
+            self._raise_tool_permission_waiting_conflict(
+                action,
+                permission_request,
+                waiting_status,
+            )
+
+    def _raise_tool_permission_waiting_conflict(
+        self,
+        action: AcceptedToolAction,
+        permission_request: PendingPermissionRequest,
+        waiting_status: TaskStatusRecord,
+    ) -> None:
+        """事务回滚后把唯一约束冲突转换为稳定领域错误。"""
+
+        with open_sqlite_connection(self.database_path) as connection:
+            action_exists = connection.execute(
+                "SELECT 1 FROM actions WHERE action_id = ?",
+                (action.action_id,),
+            ).fetchone()
+            request_id_exists = connection.execute(
+                """
+                SELECT 1 FROM permission_requests
+                WHERE permission_request_id = ?
+                """,
+                (permission_request.permission_request_id,),
+            ).fetchone()
+            action_request_exists = connection.execute(
+                """
+                SELECT 1 FROM permission_requests WHERE action_id = ?
+                """,
+                (action.action_id,),
+            ).fetchone()
+            status_exists = connection.execute(
+                "SELECT 1 FROM task_statuses WHERE task_status_id = ?",
+                (waiting_status.task_status_id,),
+            ).fetchone()
+
+        if action_exists is not None:
+            raise DuplicateActionIdError(action.action_id) from None
+        if request_id_exists is not None:
+            raise DuplicatePermissionRequestIdError(
+                permission_request.permission_request_id
+            ) from None
+        if action_request_exists is not None:
+            raise DuplicateActionPermissionRequestError(
+                action.action_id
+            ) from None
+        if status_exists is not None:
+            raise DuplicateTaskStatusIdError(
+                waiting_status.task_status_id
+            ) from None
+        raise RuntimeError("Tool 权限等待记录违反未知的 SQLite 完整性约束")
 
     def record_ask_user_waiting(
         self,

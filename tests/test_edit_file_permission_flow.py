@@ -2,6 +2,7 @@ import pytest
 
 from forgemind.runtime.permissions import (
     PermissionOutcomeNotConfirmationRequiredError,
+    build_pending_edit_file_permission_request,
     create_and_register_pending_edit_file_permission_request,
     record_permission_rejection,
     resolve_registered_permission_decision,
@@ -75,6 +76,22 @@ def test_pending_edit_permission_keeps_complete_action_snapshot() -> None:
     assert pending.arguments.new_text == "discount = 2"
     assert pending.arguments.expected_version == "sha256:v1"
     assert requests.get("permission-edit-001") is pending
+
+
+def test_build_pending_edit_permission_has_no_registry_side_effect() -> None:
+    action, actions = make_registered_edit_action()
+    requests = InMemoryPermissionRequestRegistry(actions)
+
+    pending = build_pending_edit_file_permission_request(
+        action,
+        confirmation_required(action.action_id),
+        next_permission_request_id=lambda: "permission-edit-build-001",
+    )
+
+    assert pending.action_id == action.action_id
+    assert pending.arguments is action.arguments
+    with pytest.raises(KeyError):
+        requests.get(pending.permission_request_id)
 
 
 def test_edit_permission_request_requires_confirmation_outcome() -> None:
