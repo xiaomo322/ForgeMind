@@ -13,6 +13,7 @@ from forgemind.schema.interactions import UserResponseRecord, UserResponseType
 from forgemind.schema.observations import (
     ObservationErrorCode,
     RejectedObservation,
+    TerminalObservation,
 )
 from forgemind.schema.permissions import (
     PendingPermissionRequest,
@@ -144,6 +145,22 @@ class PermissionApprovalRequiresWaitingStatusError(ValueError):
 
 class PermissionApprovalNotCurrentError(ValueError):
     """用户批准的权限请求不属于当前最新 Action。"""
+
+
+class ExecutionResultTaskMismatchError(ValueError):
+    """执行结果和恢复状态没有引用同一任务的 Action。"""
+
+
+class InvalidExecutionResultRunningStatusError(ValueError):
+    """Tool 终态记录后必须恢复 RUNNING。"""
+
+
+class ExecutionResultRequiresExecutingStatusError(ValueError):
+    """只有 EXECUTING 任务才能提交外部副作用的终态。"""
+
+
+class ExecutionResultNotCurrentError(ValueError):
+    """执行结果不属于任务的最新 Action。"""
 
 
 class UserAnswerStatusTaskMismatchError(ValueError):
@@ -371,6 +388,118 @@ class SQLiteForgeMindState:
                 executing_status.task_status_id
             ) from None
         raise RuntimeError("权限批准执行记录违反未知的 SQLite 完整性约束")
+
+    def record_execution_result_running(
+        self,
+        observation: TerminalObservation,
+        running_status: TaskStatusRecord,
+    ) -> None:
+        """原子保存已执行 Tool 的唯一终态，并恢复 Agent 循环。"""
+
+        action = self.actions.get(observation.action_id)
+        if action.task_id != running_status.task_id:
+            raise ExecutionResultTaskMismatchError
+        if running_status.status is not TaskStatus.RUNNING:
+            raise InvalidExecutionResultRunningStatusError
+
+        observation_payload_json = observation.model_dump_json()
+        status_payload_json = running_status.model_dump_json()
+        try:
+            with open_sqlite_connection(self.database_path) as connection:
+                connection.execute("PRAGMA foreign_keys = ON")
+                connection.execute("BEGIN IMMEDIATE")
+                latest_status_row = connection.execute(
+                    """
+                    SELECT task_status_id, task_id, revision,
+                           status, payload_json
+                    FROM task_statuses
+                    WHERE task_id = ?
+                    ORDER BY revision DESC
+                    LIMIT 1
+                    """,
+                    (action.task_id,),
+                ).fetchone()
+                if latest_status_row is None:
+                    raise KeyError(action.task_id)
+                latest_status_id, *stored_status = latest_status_row
+                current = SQLiteTaskStatusRegistry._restore(
+                    latest_status_id,
+                    stored_status,
+                )
+                if current.status is not TaskStatus.EXECUTING:
+                    raise ExecutionResultRequiresExecutingStatusError
+                expected_revision = current.revision + 1
+                if running_status.revision != expected_revision:
+                    raise NonSequentialTaskStatusRevisionError(
+                        action.task_id,
+                        expected_revision,
+                        running_status.revision,
+                    )
+                require_task_status_transition(
+                    current.status,
+                    running_status.status,
+                )
+                latest_action_row = connection.execute(
+                    """
+                    SELECT action_id FROM actions
+                    WHERE task_id = ?
+                    ORDER BY task_sequence DESC LIMIT 1
+                    """,
+                    (action.task_id,),
+                ).fetchone()
+                if (
+                    latest_action_row is None
+                    or latest_action_row[0] != observation.action_id
+                ):
+                    raise ExecutionResultNotCurrentError
+
+                connection.execute(
+                    """
+                    INSERT INTO observations (action_id, status, payload_json)
+                    VALUES (?, ?, ?)
+                    """,
+                    (
+                        observation.action_id,
+                        observation.status,
+                        observation_payload_json,
+                    ),
+                )
+                connection.execute(
+                    """
+                    INSERT INTO task_statuses (
+                        task_status_id, task_id, revision, status, payload_json
+                    )
+                    VALUES (?, ?, ?, ?, ?)
+                    """,
+                    (
+                        running_status.task_status_id,
+                        running_status.task_id,
+                        running_status.revision,
+                        running_status.status.value,
+                        status_payload_json,
+                    ),
+                )
+        except sqlite3.IntegrityError:
+            with open_sqlite_connection(self.database_path) as connection:
+                observation_exists = connection.execute(
+                    "SELECT 1 FROM observations WHERE action_id = ?",
+                    (observation.action_id,),
+                ).fetchone()
+                status_exists = connection.execute(
+                    "SELECT 1 FROM task_statuses WHERE task_status_id = ?",
+                    (running_status.task_status_id,),
+                ).fetchone()
+            if observation_exists is not None:
+                raise DuplicateObservationError(
+                    observation.action_id
+                ) from None
+            if status_exists is not None:
+                raise DuplicateTaskStatusIdError(
+                    running_status.task_status_id
+                ) from None
+            raise RuntimeError(
+                "Tool 执行终态记录违反未知的 SQLite 完整性约束"
+            ) from None
 
     def record_tool_permission_waiting(
         self,

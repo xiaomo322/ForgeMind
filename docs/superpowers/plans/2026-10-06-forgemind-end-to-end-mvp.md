@@ -55,12 +55,12 @@
 - Produces: `approve_edit_file_permission(...) -> PermissionApprovalExecutionResult`.
 - Produces: `resume_edit_execution(task_id, action_id, state) -> TerminalObservation`.
 
-- [ ] Test approval writes decision, plan and EXECUTING before file mutation.
-- [ ] Test current version equal to before version performs the edit once.
-- [ ] Test current version equal to after version reconstructs success without a second write.
-- [ ] Test any third version records VERSION_MISMATCH without overwriting user content.
-- [ ] Atomically save final Observation and RUNNING state after reconciliation.
-- [ ] Run focused and full ForgeMind tests; commit `feat: recover approved edit execution`.
+- [x] Test approval writes decision, plan and EXECUTING before file mutation.
+- [x] Test current version equal to before version performs the edit once.
+- [x] Test current version equal to after version reconstructs success without a second write.
+- [x] Test any third version records VERSION_MISMATCH without overwriting user content.
+- [x] Atomically save final Observation and RUNNING state after reconciliation.
+- [x] Run focused and full ForgeMind tests; commit `feat: recover approved edit execution`.
 
 ### Task 3: run_tests 与 run_command 权限 handlers
 
