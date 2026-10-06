@@ -3,6 +3,7 @@ import pytest
 from forgemind.runtime.permissions import (
     PermissionCheckActionMismatchError,
     PermissionOutcomeNotDeniedError,
+    build_permission_rejection,
     record_permission_rejection,
 )
 from forgemind.schema.actions import AcceptedReadFileToolAction
@@ -49,6 +50,32 @@ def test_runtime_records_permission_rejection_for_registered_action() -> None:
     assert rejected.error.details[0].value == "permission-decision-001"
     assert actions.get("action-001") is action
     assert observations.get("action-001") is rejected
+
+
+def test_build_permission_rejection_has_no_registry_side_effect() -> None:
+    actions = InMemoryActionRegistry()
+    action = AcceptedReadFileToolAction(
+        action_id="action-build-rejection",
+        task_id="task-001",
+        action_type="tool_call",
+        tool_name="read_file",
+        arguments={"path": "src/private.py"},
+        reason="读取受控文件",
+    )
+    actions.register(action)
+    observations = InMemoryObservationRegistry(actions)
+    permission_check = PermissionCheckResult(
+        action_id=action.action_id,
+        outcome=PermissionCheckOutcome.DENIED,
+        reason="用户拒绝读取",
+        basis_ids=("permission-decision-build",),
+    )
+
+    rejected = build_permission_rejection(action, permission_check)
+
+    assert rejected.action_id == action.action_id
+    with pytest.raises(KeyError):
+        observations.get(action.action_id)
 
 
 def test_runtime_rejects_permission_check_for_another_action() -> None:

@@ -256,13 +256,11 @@ def resolve_registered_permission_decision(
     return action, permission_check
 
 
-def record_permission_rejection(
+def build_permission_rejection(
     action: AcceptedToolAction,
     permission_check: PermissionCheckResult,
-    *,
-    observations: ObservationRegistryWriter,
 ) -> RejectedObservation:
-    """创建并记录 Runtime 在执行工具前产生的权限拒绝事实。
+    """构造 Runtime 在执行工具前产生的权限拒绝事实。
 
     Agent 只能提出行动，真正的权限检查发生在 Runtime，因此 Runtime
     才能生成这条 Observation。它沿用已接受 Action 的 ``action_id``，
@@ -298,6 +296,18 @@ def record_permission_rejection(
         ),
     )
 
+    return rejected
+
+
+def record_permission_rejection(
+    action: AcceptedToolAction,
+    permission_check: PermissionCheckResult,
+    *,
+    observations: ObservationRegistryWriter,
+) -> RejectedObservation:
+    """构造并登记权限拒绝事实，供非事务型 Registry 调用。"""
+
+    rejected = build_permission_rejection(action, permission_check)
     # 必须先写入 State 再返回。若记录失败，就不能让 Agent 误以为
     # 这条拒绝已经成为可在下一轮依赖的历史事实。
     observations.record(rejected)

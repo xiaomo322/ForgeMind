@@ -21,6 +21,12 @@ def new_permission_request_id() -> str:
     return f"permission_request_{uuid4()}"
 
 
+def new_permission_decision_id() -> str:
+    """生成供 Runtime 使用的用户权限决定标识。"""
+
+    return f"permission_decision_{uuid4()}"
+
+
 def new_user_response_id() -> str:
     """生成供 Runtime 使用的用户回答标识。"""
 

@@ -9,7 +9,15 @@ from forgemind.runtime.task_status import require_task_status_transition
 from forgemind.runtime.user_responses import validate_user_response_for_question
 from forgemind.schema.actions import AcceptedAskUserAction, AcceptedToolAction
 from forgemind.schema.interactions import UserResponseRecord, UserResponseType
-from forgemind.schema.permissions import PendingPermissionRequest
+from forgemind.schema.observations import (
+    ObservationErrorCode,
+    RejectedObservation,
+)
+from forgemind.schema.permissions import (
+    PendingPermissionRequest,
+    PermissionDecision,
+    PermissionDecisionRecord,
+)
 from forgemind.schema.tasks import (
     ActionStateView,
     TaskRecord,
@@ -34,6 +42,13 @@ from forgemind.state.permission_request_registry import (
     DuplicatePermissionRequestIdError,
     PermissionRequestActionSnapshotMismatchError,
 )
+from forgemind.state.permission_decision_registry import (
+    DuplicatePermissionDecisionIdError,
+    DuplicatePermissionRequestDecisionError,
+    PermissionDecisionRequestMismatchError,
+    UnknownPermissionRequestIdError,
+)
+from forgemind.state.observation_registry import DuplicateObservationError
 from forgemind.state.sqlite_task_registry import (
     DuplicateTaskIdError,
     SQLiteTaskRegistry,
@@ -80,6 +95,30 @@ class ToolPermissionWaitingTaskMismatchError(ValueError):
 
 class InvalidToolPermissionWaitingStatusError(ValueError):
     """待确认 Tool Action 只能与 WAITING_USER 状态一起登记。"""
+
+
+class PermissionRejectionTaskMismatchError(ValueError):
+    """权限拒绝决定与恢复状态没有引用同一任务。"""
+
+
+class InvalidPermissionRejectionDecisionError(ValueError):
+    """拒绝恢复流程只接受用户的 REJECT 决定。"""
+
+
+class PermissionRejectionObservationMismatchError(ValueError):
+    """拒绝 Observation 与用户决定没有引用同一 Action。"""
+
+
+class InvalidPermissionRejectionRunningStatusError(ValueError):
+    """权限拒绝后必须恢复为 RUNNING，交给 Agent 评估下一步。"""
+
+
+class PermissionRejectionRequiresWaitingStatusError(ValueError):
+    """只有等待用户授权的任务才能处理权限拒绝。"""
+
+
+class PermissionRejectionNotCurrentError(ValueError):
+    """用户拒绝的权限请求不属于当前最新 Action。"""
 
 
 class UserAnswerStatusTaskMismatchError(ValueError):
@@ -483,6 +522,212 @@ class SQLiteForgeMindState:
                 waiting_status.task_status_id
             ) from None
         raise RuntimeError("询问等待记录违反未知的 SQLite 完整性约束")
+
+    def record_permission_rejection_running(
+        self,
+        decision: PermissionDecisionRecord,
+        observation: RejectedObservation,
+        running_status: TaskStatusRecord,
+    ) -> None:
+        """原子保存用户拒绝、拒绝终态并恢复 Agent 循环。"""
+
+        if decision.task_id != running_status.task_id:
+            raise PermissionRejectionTaskMismatchError
+        if decision.decision is not PermissionDecision.REJECT:
+            raise InvalidPermissionRejectionDecisionError
+        if (
+            observation.action_id != decision.action_id
+            or observation.error.code
+            is not ObservationErrorCode.PERMISSION_DENIED
+        ):
+            raise PermissionRejectionObservationMismatchError
+        if running_status.status is not TaskStatus.RUNNING:
+            raise InvalidPermissionRejectionRunningStatusError
+
+        try:
+            request = self.permission_requests.get(
+                decision.permission_request_id
+            )
+        except KeyError:
+            raise UnknownPermissionRequestIdError(
+                decision.permission_request_id
+            ) from None
+        if (
+            decision.task_id != request.task_id
+            or decision.action_id != request.action_id
+        ):
+            raise PermissionDecisionRequestMismatchError(
+                decision.permission_request_id
+            )
+
+        decision_payload_json = decision.model_dump_json()
+        observation_payload_json = observation.model_dump_json()
+        status_payload_json = running_status.model_dump_json()
+
+        try:
+            with open_sqlite_connection(self.database_path) as connection:
+                connection.execute("PRAGMA foreign_keys = ON")
+                connection.execute("BEGIN IMMEDIATE")
+
+                latest_status_row = connection.execute(
+                    """
+                    SELECT task_status_id, task_id, revision,
+                           status, payload_json
+                    FROM task_statuses
+                    WHERE task_id = ?
+                    ORDER BY revision DESC
+                    LIMIT 1
+                    """,
+                    (decision.task_id,),
+                ).fetchone()
+                if latest_status_row is None:
+                    raise KeyError(decision.task_id)
+
+                latest_status_id, *latest_stored_status = latest_status_row
+                current = SQLiteTaskStatusRegistry._restore(
+                    latest_status_id,
+                    latest_stored_status,
+                )
+                if current.status is not TaskStatus.WAITING_USER:
+                    raise PermissionRejectionRequiresWaitingStatusError
+
+                expected_revision = current.revision + 1
+                if running_status.revision != expected_revision:
+                    raise NonSequentialTaskStatusRevisionError(
+                        decision.task_id,
+                        expected_revision,
+                        running_status.revision,
+                    )
+                require_task_status_transition(
+                    current.status,
+                    running_status.status,
+                )
+
+                latest_action_row = connection.execute(
+                    """
+                    SELECT action_id
+                    FROM actions
+                    WHERE task_id = ?
+                    ORDER BY task_sequence DESC
+                    LIMIT 1
+                    """,
+                    (decision.task_id,),
+                ).fetchone()
+                if (
+                    latest_action_row is None
+                    or latest_action_row[0] != decision.action_id
+                ):
+                    raise PermissionRejectionNotCurrentError
+
+                connection.execute(
+                    """
+                    INSERT INTO permission_decisions (
+                        permission_decision_id,
+                        permission_request_id,
+                        task_id,
+                        action_id,
+                        decision,
+                        payload_json
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        decision.permission_decision_id,
+                        decision.permission_request_id,
+                        decision.task_id,
+                        decision.action_id,
+                        decision.decision.value,
+                        decision_payload_json,
+                    ),
+                )
+                connection.execute(
+                    """
+                    INSERT INTO observations (
+                        action_id,
+                        status,
+                        payload_json
+                    )
+                    VALUES (?, ?, ?)
+                    """,
+                    (
+                        observation.action_id,
+                        observation.status,
+                        observation_payload_json,
+                    ),
+                )
+                connection.execute(
+                    """
+                    INSERT INTO task_statuses (
+                        task_status_id,
+                        task_id,
+                        revision,
+                        status,
+                        payload_json
+                    )
+                    VALUES (?, ?, ?, ?, ?)
+                    """,
+                    (
+                        running_status.task_status_id,
+                        running_status.task_id,
+                        running_status.revision,
+                        running_status.status.value,
+                        status_payload_json,
+                    ),
+                )
+        except sqlite3.IntegrityError:
+            self._raise_permission_rejection_running_conflict(
+                decision,
+                observation,
+                running_status,
+            )
+
+    def _raise_permission_rejection_running_conflict(
+        self,
+        decision: PermissionDecisionRecord,
+        observation: RejectedObservation,
+        running_status: TaskStatusRecord,
+    ) -> None:
+        """回滚后把权限拒绝流程中的唯一约束冲突分类。"""
+
+        with open_sqlite_connection(self.database_path) as connection:
+            decision_id_exists = connection.execute(
+                """
+                SELECT 1 FROM permission_decisions
+                WHERE permission_decision_id = ?
+                """,
+                (decision.permission_decision_id,),
+            ).fetchone()
+            request_decision_exists = connection.execute(
+                """
+                SELECT 1 FROM permission_decisions
+                WHERE permission_request_id = ?
+                """,
+                (decision.permission_request_id,),
+            ).fetchone()
+            observation_exists = connection.execute(
+                "SELECT 1 FROM observations WHERE action_id = ?",
+                (observation.action_id,),
+            ).fetchone()
+            status_exists = connection.execute(
+                "SELECT 1 FROM task_statuses WHERE task_status_id = ?",
+                (running_status.task_status_id,),
+            ).fetchone()
+
+        if decision_id_exists is not None:
+            raise DuplicatePermissionDecisionIdError(
+                decision.permission_decision_id
+            ) from None
+        if request_decision_exists is not None:
+            raise DuplicatePermissionRequestDecisionError(
+                decision.permission_request_id
+            ) from None
+        if observation_exists is not None:
+            raise DuplicateObservationError(observation.action_id) from None
+        if status_exists is not None:
+            raise DuplicateTaskStatusIdError(
+                running_status.task_status_id
+            ) from None
+        raise RuntimeError("权限拒绝恢复记录违反未知的 SQLite 完整性约束")
 
     def record_user_answer_running(
         self,
