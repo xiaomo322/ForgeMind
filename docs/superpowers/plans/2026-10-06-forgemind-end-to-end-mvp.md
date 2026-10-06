@@ -142,8 +142,8 @@
 - Consumes all previous public application service interfaces.
 - Produces a documented runnable MVP workflow.
 
-- [ ] Test fake-model sequence: search → read → edit wait → approve → run_tests wait → approve → complete.
-- [ ] Close/reopen SQLite between permission wait and approval to prove restart recovery.
-- [ ] Verify real files, observations, permission decisions and final COMPLETED state.
-- [ ] Run `pytest` for all ForgeMind tests with the two independent FastAPI paths excluded.
-- [ ] Run `git diff --check`, inspect final status, update docs and commit `docs: document end-to-end ForgeMind MVP`.
+- [x] Test fake-model sequence: search → read → edit wait → approve → run_tests wait → approve → complete.
+- [x] Close/reopen SQLite between permission wait and approval to prove restart recovery.
+- [x] Verify real files, observations, permission decisions and final COMPLETED state.
+- [x] Run `pytest` for all ForgeMind tests with the two independent FastAPI paths excluded.
+- [x] Run `git diff --check`, inspect final status, update docs and commit `docs: document end-to-end ForgeMind MVP`.

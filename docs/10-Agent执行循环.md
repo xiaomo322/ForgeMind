@@ -116,3 +116,31 @@ Decision 格式失败和 Runtime 处理失败。
 AcceptedAskUserAction 与 revision 2 的 WAITING_USER。非法模型输出路径保持
 revision 1 的 RUNNING 且没有 Action。新增 2 项，相关回归 20 项、完整回归
 531 项通过。
+## V0.1 端到端运行循环（2026-10-06）
+
+应用层通过 `ForgeMindApplication.run_until_pause()` 重复执行单轮 Loop：
+
+```text
+RUNNING
+  -> 构造有限 State Context
+  -> 调用供应商无关 AgentModel
+  -> 严格解析 AgentDecision
+  -> Runtime 分派唯一 handler
+  -> read/search：记录 Observation，继续下一轮
+  -> ask_user/受控 Tool：进入 WAITING_USER，返回调用方
+  -> complete：原子写入 Completion Action 与 COMPLETED，停止
+```
+
+用户批准 `edit_file` 后，Runtime 先在一个 SQLite 事务中写入批准决定、
+`EditExecutionPlan` 和 `EXECUTING`。恢复时比较当前文件版本：等于
+`before_version` 才执行写入；等于 `after_version` 说明写入已经发生，只补齐
+Observation；第三种版本记录 `VERSION_MISMATCH`，不覆盖外部修改。
+
+`run_tests` 和 `run_command` 同样先进入 `EXECUTING`，随后把真实子进程结果
+保存为 Observation。pytest 测试用例失败属于 Tool 已成功返回的
+`RunTestsResult(test_outcome="failed")`，不会被错误标记成 Runtime 执行失败。
+如果进程在终态写入前中断，重启后会记录 `EXECUTION_RESULT_UNKNOWN`；系统
+不会自动重放可能已经产生副作用的命令，而是让 Agent 根据这条事实重新验证。
+
+`complete` 是显式 Decision。Runtime 只允许从 `RUNNING` 转换，并确认前一条
+Action 已有终态 Observation 或用户回答，因此模型不能跳过尚未完成的行动。

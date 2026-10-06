@@ -99,10 +99,39 @@ docs/         # 01–16 正式设计文档和开发日志
 - 高层 ask_user Runtime 入口负责生成权威编号、构造下一状态并在提交成功后返回等待结果。
 - State 为每个任务内的 Action 分配独立连续序号，恢复历史时按照登记顺序返回，不从随机 `action_id` 推断先后。
 
-真实模型尚未接入应用级多轮 Loop；五种 Tool Decision 的 Runtime handlers 仍需统一组装。
+## 运行端到端 MVP
+
+API Key 仍只放在环境变量中；变量名由 `config/model.toml` 的
+`api_key_env` 指定。以当前 DeepSeek 配置为例：
+
+```powershell
+$env:DEEPSEEK_API_KEY = "你的 API Key"
+```
+
+创建任务并运行到需要用户输入或完成：
+
+```powershell
+uv run --no-sync python -m forgemind.cli start "修复项目中的折扣错误" --project-root .
+```
+
+CLI 会输出 JSON，其中包含 `task_id`、状态和本次执行步数。后续可以使用：
+
+```powershell
+python -m forgemind.cli status <task_id>
+python -m forgemind.cli run <task_id>
+python -m forgemind.cli answer <task_id> <question_action_id> "用户回答"
+python -m forgemind.cli approve <task_id> <permission_request_id>
+python -m forgemind.cli reject <task_id> <permission_request_id>
+```
+
+安装项目后也可以直接使用 `forgemind` 命令。SQLite 默认保存在
+`.forgemind/state.db`，可通过全局 `--database` 参数指定其他位置。
+
+当前 MVP 已接通真实模型、多轮 Agent Loop、七种 Decision 路由、五种
+Tool、用户询问、逐 Action 权限、SQLite 重启恢复、显式完成状态和 CLI。
 
 ## 当前学习进度
 
-当前学习真实模型进入 Agent Loop 的边界（更新于 2026-10-06）。五个 Tool V0.1 均已形成完整证据链；`ask_user` 从 Agent Decision、WAITING_USER、持久化用户响应到后续状态的两条链路已完成。供应商无关的单轮 Agent 入口现已与确定性 Runtime 分派组合为可运行 Loop Step。模型 system 消息包含由严格 `AgentDecision` 自动生成的 JSON Schema，OpenAI 兼容适配器从 `config/model.toml` 和环境变量建立真实 DeepSeek 客户端。安全冒烟入口已取得真实 `search_code` JSON 并通过 Parser。`search_code` 与 `read_file` 现已接入应用级 handler。`edit_file` 已完成逐 Action 确认策略、原子权限等待、Agent Loop handler 和用户拒绝恢复分支；拒绝会形成权威终态并恢复 Agent 循环，不会修改文件。下一步实现批准后的安全执行与崩溃恢复边界。排除独立 FastAPI 学习文件后，ForgeMind 测试 572 项通过；FastAPI 学习测试的既有差异仍未纳入本功能。详细设计演进见 `docs/06-数据结构设计.md`，逐步开发记录见 `docs/16-项目开发日志.md`。
+当前 ForgeMind V0.1 端到端 MVP 已完成（更新于 2026-10-06）。应用服务可以创建任务、连续调用真实模型、执行立即型 Tool、暂停等待问题或权限、恢复用户决定，并在证据完整时进入 `COMPLETED`。`edit_file` 使用持久化执行计划和 `EXECUTING` 状态跨进程对账；`run_tests` 与 `run_command` 保存真实进程结果。端到端测试覆盖 search → read → edit → approve → pytest → approve → complete，并在权限阶段重启 SQLite State。详细设计演进见 `docs/06-数据结构设计.md`，逐步开发记录见 `docs/16-项目开发日志.md`。
 
 每个切片只处理一个主要概念，并明确留出核心代码由用户先写；AI 提供脚手架、测试和基于真实错误的 Debug 支持。
