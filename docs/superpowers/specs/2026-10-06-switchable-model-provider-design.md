@@ -4,38 +4,52 @@
 
 ## 目标
 
-ForgeMind 每次运行只使用一个模型 API 厂商，但可以通过构造配置切换厂商、模型和可选 API 地址。Agent Loop、State、Decision Parser 和 Runtime 不感知具体厂商。
+ForgeMind 每次运行只使用一个模型 API 厂商，并通过项目中的单一配置文件切换厂商地址、模型和调用参数。Agent Loop、State、Decision Parser 和 Runtime 不感知具体厂商。
 
 ## 架构
 
-保留现有 `AgentModel.generate(AgentTurnInput) -> str` 作为 ForgeMind 的稳定边界。新增 `LiteLLMAgentModel` 实现该协议，在内部使用 LiteLLM Python SDK 的统一 `completion()` 接口。
+保留现有 `AgentModel.generate(AgentTurnInput) -> str` 作为稳定边界。第一版新增 `OpenAICompatibleAgentModel`，内部使用 OpenAI Python SDK 的 Chat Completions 接口。DeepSeek 支持该接口，因此可以先完成真实调用；其他兼容厂商只需替换配置。
 
-调用时只创建一个模型实例，例如使用 `openai/...`、`anthropic/...`、`gemini/...` 或 `ollama/...` 模型标识。切换厂商时替换模型配置和对应环境变量，不修改 Agent Loop。
+第一版不引入 LiteLLM，不实现多模型并行、自动路由、负载均衡或失败回退。未来遇到不兼容 OpenAI 格式的厂商时，为同一个 `AgentModel` Protocol 增加新的适配器，不修改 Agent Loop。
 
-第一版直接使用 LiteLLM Python SDK，不部署 LiteLLM Proxy，不实现多模型并行、自动路由、负载均衡或失败回退。
+## 单一配置文件
 
-## 配置边界
+项目根目录新增 `config/model.toml`：
 
-模型实例包含：
+```toml
+[model]
+adapter = "openai_compatible"
+base_url = "https://api.deepseek.com"
+model = "deepseek-v4-flash"
+api_key_env = "DEEPSEEK_API_KEY"
+timeout_seconds = 60
+```
 
-- 非空 `model`：包含 LiteLLM 厂商前缀和模型名；
-- 正数 `timeout_seconds`：限制一次模型调用等待时间；
-- 可选 `api_base`：支持本地 Ollama 或 OpenAI 兼容服务地址；为 `None` 时不向 LiteLLM 传递该参数。
+字段含义：
 
-API Key 不写入配置对象、不写入日志、不写入 State，由 LiteLLM 按当前厂商从环境变量或厂商认证链读取。
+- `adapter` 指定适配器类型，第一版只接受 `openai_compatible`；
+- `base_url` 是当前 API 厂商地址；
+- `model` 是厂商模型名；
+- `api_key_env` 是保存密钥的环境变量名称；
+- `timeout_seconds` 是单次请求超时秒数。
+
+真实 API Key 不写入 TOML、不写入日志、不写入 State，也不提交到 Git。配置加载器读取 `api_key_env` 后，再从进程环境取得密钥。配置文件可以安全提交，因为它只包含环境变量名称。
+
+配置由 Python 标准库 `tomllib` 读取，再通过严格 Pydantic 模型校验。文件不存在、TOML 语法错误、字段缺失、额外字段、空字符串或非正数超时都必须明确失败，不能使用隐藏默认值继续运行。
 
 ## 数据流
 
-1. `AgentTurnInput` 提供固定顺序的 system、user 消息。
-2. 适配器把每条严格消息转换为 `{"role": ..., "content": ...}` 字典。
-3. 调用注入的 `completion(model=..., messages=..., timeout=..., api_base=...)`。
-4. 从统一响应的 `choices[0].message.content` 取得原始文本。
-5. 只有非空字符串可以返回给现有 Decision Parser；空内容或错误响应抛出明确异常。
+1. 应用启动时读取并校验 `config/model.toml`。
+2. 工厂根据 `adapter` 创建唯一的 `OpenAICompatibleAgentModel`。
+3. 适配器把严格 system、user 消息转换为 OpenAI Chat Completions 消息。
+4. 调用配置中的 `base_url`、`model` 和 `timeout_seconds`，并启用 `response_format={"type": "json_object"}`。
+5. 从 `choices[0].message.content` 取得模型原始文本。
+6. 只有非空字符串可以返回给现有 Decision Parser；空内容或错误响应抛出明确异常。
 
 ## 测试与错误
 
-单元测试注入假的 `completion` 函数，不联网、不使用 API Key、不产生费用。测试核对模型参数、消息顺序、可选地址和原始文本返回。
+配置测试使用临时 TOML 和临时环境变量，不读取开发者真实密钥。适配器测试注入假的客户端，不联网、不产生费用，并核对模型参数、消息顺序、JSON 模式和原始文本返回。
 
-LiteLLM 的认证、限流、网络及供应商错误保持原异常向上传递，供 `run_agent_turn()` 区分“模型调用失败”和“模型返回内容无法解析”。空响应由适配器转换为 ForgeMind 的 `EmptyModelResponseError`。
+SDK 的认证、限流、网络及厂商错误保持原异常向上传递，供 `run_agent_turn()` 区分“模型调用失败”和“模型返回内容无法解析”。空响应由适配器转换为 ForgeMind 的 `EmptyModelResponseError`。
 
-完成单元测试后，再由用户选择并配置一个实际厂商进行首次真实调用。首次真实调用只打印请求阶段、模型原始响应和解析结果，不执行 Tool 副作用。
+完成配置与适配器单元测试后，再设置 `DEEPSEEK_API_KEY` 进行首次真实调用。首次真实调用只打印调用阶段、模型原始响应和解析结果，不执行 Tool 副作用。
