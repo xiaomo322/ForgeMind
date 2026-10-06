@@ -1,4 +1,14 @@
+from typing import Protocol
+
 from forgemind.schema.actions import AcceptedAction
+
+
+class ActionRegistryWriter(Protocol):
+    """Runtime 接受 Action 时需要的最小持久化能力。"""
+
+    def register(self, action: AcceptedAction) -> None:
+        """登记一条不可覆盖的权威 Action。"""
+        ...
 
 
 class DuplicateActionIdError(ValueError):

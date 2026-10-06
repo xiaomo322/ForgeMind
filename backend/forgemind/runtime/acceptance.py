@@ -18,10 +18,9 @@ from forgemind.schema.decisions import (
     SearchCodeToolCallDecision,
 )
 from forgemind.state.action_registry import (
+    ActionRegistryWriter,
     DuplicateActionIdError,
-    InMemoryActionRegistry,
 )
-
 
 ActionIdFactory = Callable[[], str]
 
@@ -86,7 +85,7 @@ def accept_and_register_read_file_decision(
     decision: ReadFileToolCallDecision,
     *,
     task_id: str,
-    registry: InMemoryActionRegistry,
+    registry: ActionRegistryWriter,
     next_action_id: ActionIdFactory = new_action_id,
     max_id_attempts: int = 3,
 ) -> AcceptedReadFileToolAction:
@@ -140,7 +139,7 @@ def accept_and_register_search_code_decision(
     decision: SearchCodeToolCallDecision,
     *,
     task_id: str,
-    registry: InMemoryActionRegistry,
+    registry: ActionRegistryWriter,
     next_action_id: ActionIdFactory = new_action_id,
     max_id_attempts: int = 3,
 ) -> AcceptedSearchCodeToolAction:
@@ -187,7 +186,7 @@ def accept_and_register_edit_file_decision(
     decision: EditFileToolCallDecision,
     *,
     task_id: str,
-    registry: InMemoryActionRegistry,
+    registry: ActionRegistryWriter,
     next_action_id: ActionIdFactory = new_action_id,
     max_id_attempts: int = 3,
 ) -> AcceptedEditFileToolAction:
@@ -234,7 +233,7 @@ def accept_and_register_run_tests_decision(
     decision: RunTestsToolCallDecision,
     *,
     task_id: str,
-    registry: InMemoryActionRegistry,
+    registry: ActionRegistryWriter,
     next_action_id: ActionIdFactory = new_action_id,
     max_id_attempts: int = 3,
 ) -> AcceptedRunTestsToolAction:
@@ -281,7 +280,7 @@ def accept_and_register_run_command_decision(
     decision: RunCommandToolCallDecision,
     *,
     task_id: str,
-    registry: InMemoryActionRegistry,
+    registry: ActionRegistryWriter,
     next_action_id: ActionIdFactory = new_action_id,
     max_id_attempts: int = 3,
 ) -> AcceptedRunCommandToolAction:
