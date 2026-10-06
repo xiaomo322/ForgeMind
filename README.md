@@ -127,6 +127,33 @@ python -m forgemind.cli reject <task_id> <permission_request_id>
 安装项目后也可以直接使用 `forgemind` 命令。SQLite 默认保存在
 `.forgemind/state.db`，可通过全局 `--database` 参数指定其他位置。
 
+### 从 Python 代码调用
+
+真正的代码入口是 `ForgeMindApplication`，CLI 也只是调用这一层：
+
+```python
+from pathlib import Path
+
+from forgemind.agent.openai_compatible_model import (
+    create_openai_compatible_agent_model,
+)
+from forgemind.application import ForgeMindApplication
+from forgemind.config.model import load_model_provider_config
+from forgemind.state.sqlite_state import SQLiteForgeMindState
+
+config = load_model_provider_config(Path("config/model.toml"))
+model = create_openai_compatible_agent_model(config)
+state = SQLiteForgeMindState.open(Path(".forgemind/state.db"))
+app = ForgeMindApplication(state=state, model=model)
+
+task = app.create_task("修复 add 函数并运行测试", Path("你的项目目录"))
+result = app.run_until_pause(task.task_id)
+print(result.status)
+```
+
+包含用户询问和权限确认循环的完整示例位于
+`examples/calculator_demo/run_agent.py`。
+
 当前 MVP 已接通真实模型、多轮 Agent Loop、七种 Decision 路由、五种
 Tool、用户询问、逐 Action 权限、SQLite 重启恢复、显式完成状态和 CLI。
 
