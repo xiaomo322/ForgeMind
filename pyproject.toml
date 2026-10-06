@@ -9,6 +9,7 @@ dependencies = [
 ]
 
 [project.scripts]
+forgemind = "forgemind.cli:main"
 forgemind-model-smoke = "forgemind.agent.model_smoke:main"
 
 [build-system]

@@ -1,0 +1,171 @@
+"""ForgeMind 的多轮应用服务；CLI 和未来 Web API 共用这一层。"""
+
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass
+from pathlib import Path
+import sys
+
+from forgemind.agent.loop import AgentLoopStepResult, run_agent_loop_step
+from forgemind.agent.turn import AgentModel
+from forgemind.runtime.handlers import build_runtime_handlers
+from forgemind.runtime.ids import new_task_id, new_task_status_id
+from forgemind.runtime.permission_approvals import approve_edit_file_permission
+from forgemind.runtime.permission_execution import approve_process_permission
+from forgemind.runtime.permission_rejections import reject_permission_request
+from forgemind.runtime.user_answers import resume_from_user_answer
+from forgemind.schema.decisions import AgentDecisionParseFailure
+from forgemind.schema.tasks import TaskRecord, TaskStateView, TaskStatus, TaskStatusRecord
+from forgemind.state.sqlite_state import SQLiteForgeMindState
+
+
+IdFactory = Callable[[], str]
+
+
+@dataclass(frozen=True, slots=True)
+class ApplicationRunResult:
+    """一次连续驱动停止时的可观测结果。"""
+
+    task_id: str
+    status: TaskStatus
+    steps_executed: int
+    parse_failure: AgentDecisionParseFailure | None = None
+    last_step: AgentLoopStepResult[object] | None = None
+
+
+@dataclass(slots=True)
+class ForgeMindApplication:
+    """从权威 SQLite State 驱动 Agent、Runtime 和用户交互。"""
+
+    state: SQLiteForgeMindState
+    model: AgentModel
+    max_action_count: int = 20
+    allowed_programs: Mapping[str, Path] | None = None
+
+    def __post_init__(self) -> None:
+        if self.allowed_programs is None:
+            self.allowed_programs = {"python": Path(sys.executable).resolve()}
+
+    def create_task(
+        self,
+        original_request: str,
+        project_root: Path,
+        *,
+        next_task_id: IdFactory = new_task_id,
+        next_task_status_id: IdFactory = new_task_status_id,
+    ) -> TaskRecord:
+        """创建任务及首条 RUNNING 状态。"""
+
+        task = TaskRecord(
+            task_id=next_task_id(),
+            original_request=original_request,
+            project_root=str(project_root.resolve()),
+        )
+        self.state.create_task(
+            task,
+            TaskStatusRecord(
+                task_status_id=next_task_status_id(),
+                task_id=task.task_id,
+                revision=1,
+                status=TaskStatus.RUNNING,
+                reason="任务创建",
+            ),
+        )
+        return task
+
+    def get_task(self, task_id: str) -> TaskStateView:
+        return self.state.get_task_view(task_id)
+
+    def run_until_pause(
+        self,
+        task_id: str,
+        *,
+        max_steps: int = 20,
+    ) -> ApplicationRunResult:
+        """连续运行立即型步骤，直到等待、完成或解析失败。"""
+
+        if max_steps < 1:
+            raise ValueError("max_steps 必须至少为 1")
+        last_step: AgentLoopStepResult[object] | None = None
+        for step_number in range(1, max_steps + 1):
+            status = self.state.task_statuses.get_current(task_id).status
+            if status is not TaskStatus.RUNNING:
+                return ApplicationRunResult(
+                    task_id, status, step_number - 1, last_step=last_step
+                )
+            last_step = run_agent_loop_step(
+                task_id=task_id,
+                state=self.state,
+                model=self.model,
+                handlers=build_runtime_handlers(task_id=task_id, state=self.state),
+                max_action_count=self.max_action_count,
+            )
+            if isinstance(last_step.dispatch_result, AgentDecisionParseFailure):
+                return ApplicationRunResult(
+                    task_id,
+                    TaskStatus.RUNNING,
+                    step_number,
+                    parse_failure=last_step.dispatch_result,
+                    last_step=last_step,
+                )
+            status = self.state.task_statuses.get_current(task_id).status
+            if status is not TaskStatus.RUNNING:
+                return ApplicationRunResult(
+                    task_id, status, step_number, last_step=last_step
+                )
+        return ApplicationRunResult(
+            task_id,
+            self.state.task_statuses.get_current(task_id).status,
+            max_steps,
+            last_step=last_step,
+        )
+
+    def answer_question(
+        self,
+        *,
+        task_id: str,
+        question_action_id: str,
+        raw_response: str,
+        selected_option: str | None = None,
+    ) -> object:
+        return resume_from_user_answer(
+            task_id=task_id,
+            question_action_id=question_action_id,
+            raw_response=raw_response,
+            selected_option=selected_option,
+            state=self.state,
+        )
+
+    def decide_permission(
+        self,
+        *,
+        task_id: str,
+        permission_request_id: str,
+        approve: bool,
+        raw_response: str,
+    ) -> object:
+        """按持久化请求类型执行批准或拒绝，绝不接收新参数快照。"""
+
+        if not approve:
+            return reject_permission_request(
+                task_id=task_id,
+                permission_request_id=permission_request_id,
+                raw_response=raw_response,
+                state=self.state,
+            )
+        request = self.state.permission_requests.get(permission_request_id)
+        if request.tool_name == "edit_file":
+            return approve_edit_file_permission(
+                task_id=task_id,
+                permission_request_id=permission_request_id,
+                raw_response=raw_response,
+                state=self.state,
+            )
+        if request.tool_name in {"run_tests", "run_command"}:
+            return approve_process_permission(
+                task_id=task_id,
+                permission_request_id=permission_request_id,
+                raw_response=raw_response,
+                state=self.state,
+                allowed_programs=self.allowed_programs or {},
+            )
+        raise ValueError(f"V0.1 不支持批准该 Tool：{request.tool_name}")

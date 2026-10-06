@@ -1,6 +1,12 @@
 from uuid import uuid4
 
 
+def new_task_id() -> str:
+    """生成 Runtime 权威任务编号。"""
+
+    return f"task_{uuid4()}"
+
+
 def new_action_id() -> str:
     """生成供 Runtime 使用的 Action 标识。"""
 

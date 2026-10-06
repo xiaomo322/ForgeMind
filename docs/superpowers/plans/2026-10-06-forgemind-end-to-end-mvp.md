@@ -123,12 +123,12 @@
 - Produces: `ForgeMindApplication.create_task`, `run_until_pause`, `answer_question`, `decide_permission`, `get_task`.
 - Produces: `forgemind` CLI with `start`, `run`, `status`, `answer`, `approve`, `reject` subcommands and JSON output.
 
-- [ ] Test task creation persists absolute project root and RUNNING revision 1.
-- [ ] Test run loop repeats immediate read/search results and stops on WAITING_USER, EXECUTING, COMPLETED, parse failure, or max steps.
-- [ ] Test question answers and permission decisions resume the correct pending record.
-- [ ] Load real model through existing config factory only in CLI composition root.
-- [ ] Add CLI parser and stable JSON output; preserve API key secrecy.
-- [ ] Run focused/full tests; commit `feat: add ForgeMind application and CLI`.
+- [x] Test task creation persists absolute project root and RUNNING revision 1.
+- [x] Test run loop repeats immediate read/search results and stops on WAITING_USER, EXECUTING, COMPLETED, parse failure, or max steps.
+- [x] Test question answers and permission decisions resume the correct pending record.
+- [x] Load real model through existing config factory only in CLI composition root.
+- [x] Add CLI parser and stable JSON output; preserve API key secrecy.
+- [x] Run focused/full tests; commit `feat: add ForgeMind application and CLI`.
 
 ### Task 6: 真实端到端验收与文档
 
