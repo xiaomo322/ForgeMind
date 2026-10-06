@@ -9,12 +9,26 @@ from forgemind.agent.loop import AgentLoopStepResult, run_agent_loop_step
 from forgemind.agent.turn import AgentModel
 from forgemind.runtime.handlers import build_runtime_handlers
 from forgemind.runtime.ids import new_task_id, new_task_status_id
-from forgemind.runtime.permission_approvals import approve_edit_file_permission
+from forgemind.runtime.permission_approvals import (
+    approve_edit_file_permission,
+    resume_edit_execution,
+)
 from forgemind.runtime.permission_execution import approve_process_permission
 from forgemind.runtime.permission_rejections import reject_permission_request
 from forgemind.runtime.user_answers import resume_from_user_answer
 from forgemind.schema.decisions import AgentDecisionParseFailure
-from forgemind.schema.tasks import TaskRecord, TaskStateView, TaskStatus, TaskStatusRecord
+from forgemind.schema.actions import AcceptedEditFileToolAction
+from forgemind.schema.observations import (
+    FailedObservation,
+    ObservationError,
+    ObservationErrorCode,
+)
+from forgemind.schema.tasks import (
+    TaskRecord,
+    TaskStateView,
+    TaskStatus,
+    TaskStatusRecord,
+)
 from forgemind.state.sqlite_state import SQLiteForgeMindState
 
 
@@ -86,6 +100,11 @@ class ForgeMindApplication:
         if max_steps < 1:
             raise ValueError("max_steps 必须至少为 1")
         last_step: AgentLoopStepResult[object] | None = None
+        if (
+            self.state.task_statuses.get_current(task_id).status
+            is TaskStatus.EXECUTING
+        ):
+            self._recover_interrupted_execution(task_id)
         for step_number in range(1, max_steps + 1):
             status = self.state.task_statuses.get_current(task_id).status
             if status is not TaskStatus.RUNNING:
@@ -118,6 +137,42 @@ class ForgeMindApplication:
             max_steps,
             last_step=last_step,
         )
+
+    def _recover_interrupted_execution(self, task_id: str) -> None:
+        """恢复 edit_file；进程型 Tool 则诚实记录结果未知。"""
+
+        view = self.state.get_task_view(task_id)
+        if not view.actions:
+            raise RuntimeError("EXECUTING 任务缺少当前 Action")
+        action = view.actions[-1].action
+        if isinstance(action, AcceptedEditFileToolAction):
+            resume_edit_execution(
+                task_id=task_id,
+                action_id=action.action_id,
+                state=self.state,
+            )
+            return
+
+        observation = FailedObservation(
+            action_id=action.action_id,
+            status="failed",
+            error=ObservationError(
+                code=ObservationErrorCode.EXECUTION_RESULT_UNKNOWN,
+                message=(
+                    "进程在执行期间中断，Runtime 无法确认外部命令是否完成；"
+                    "为避免重复副作用，没有自动重试"
+                ),
+            ),
+        )
+        current = view.current_status
+        running = TaskStatusRecord(
+            task_status_id=new_task_status_id(),
+            task_id=task_id,
+            revision=current.revision + 1,
+            status=TaskStatus.RUNNING,
+            reason="中断的 Tool 执行结果未知，交给 Agent 重新评估",
+        )
+        self.state.record_execution_result_running(observation, running)
 
     def answer_question(
         self,

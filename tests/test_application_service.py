@@ -3,8 +3,14 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from forgemind.application import ForgeMindApplication
+from forgemind.runtime.run_command_handler import handle_run_command_decision
 from forgemind.schema.context import AgentTurnInput
-from forgemind.schema.tasks import TaskStatus
+from forgemind.schema.decisions import RunCommandToolCallDecision
+from forgemind.schema.permissions import (
+    PermissionDecision,
+    PermissionDecisionRecord,
+)
+from forgemind.schema.tasks import TaskStatus, TaskStatusRecord
 from forgemind.state.sqlite_state import SQLiteForgeMindState
 
 
@@ -77,3 +83,75 @@ def test_application_stops_on_parse_failure_without_inventing_action(
     assert result.status is TaskStatus.RUNNING
     assert result.parse_failure is not None
     assert state.get_task_view(task.task_id).actions == ()
+
+
+def test_application_records_unknown_result_instead_of_replaying_command(
+    tmp_path: Path,
+) -> None:
+    state = SQLiteForgeMindState.open(tmp_path / "state.db")
+    app = ForgeMindApplication(
+        state=state,
+        model=SequenceModel(
+            [
+                _json(
+                    {
+                        "action_type": "complete",
+                        "reason": "中断证据已经记录",
+                        "summary": "停止自动重试",
+                    }
+                )
+            ]
+        ),
+    )
+    task = app.create_task(
+        "执行命令",
+        tmp_path,
+        next_task_id=lambda: "task-001",
+        next_task_status_id=lambda: "status-001",
+    )
+    waiting = handle_run_command_decision(
+        RunCommandToolCallDecision(
+            action_type="tool_call",
+            tool_name="run_command",
+            arguments={
+                "program": "python",
+                "args": ("-V",),
+                "working_directory": ".",
+                "timeout_seconds": 30,
+            },
+            reason="执行命令",
+        ),
+        task_id=task.task_id,
+        state=state,
+        next_action_id=lambda: "action-001",
+        next_permission_request_id=lambda: "request-001",
+        next_task_status_id=lambda: "status-002",
+    )
+    state.record_process_permission_approval_executing(
+        PermissionDecisionRecord(
+            permission_decision_id="decision-001",
+            permission_request_id=waiting.permission_request.permission_request_id,
+            task_id=task.task_id,
+            action_id=waiting.action.action_id,
+            decision=PermissionDecision.APPROVE,
+            source="user",
+            raw_response="同意",
+        ),
+        TaskStatusRecord(
+            task_status_id="status-003",
+            task_id=task.task_id,
+            revision=3,
+            status=TaskStatus.EXECUTING,
+            reason="执行命令",
+        ),
+    )
+
+    result = ForgeMindApplication(
+        state=SQLiteForgeMindState.open(state.database_path),
+        model=app.model,
+    ).run_until_pause(task.task_id)
+
+    assert result.status is TaskStatus.COMPLETED
+    recovered = state.get_task_view(task.task_id).actions[0].observation
+    assert recovered is not None
+    assert recovered.error.code.value == "EXECUTION_RESULT_UNKNOWN"
