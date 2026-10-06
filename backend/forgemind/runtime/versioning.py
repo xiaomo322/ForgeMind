@@ -10,7 +10,7 @@ from forgemind.schema.observations import (
     ObservationErrorDetail,
     RejectedObservation,
 )
-from forgemind.state.observation_registry import InMemoryObservationRegistry
+from forgemind.state.observation_registry import ObservationRegistryWriter
 
 
 class ReadFileExpectedVersionRequiredError(ValueError):
@@ -117,7 +117,7 @@ def record_read_file_version_rejection(
     action: AcceptedReadFileToolAction,
     mismatch: ReadFileVersionMismatchError,
     *,
-    observations: InMemoryObservationRegistry,
+    observations: ObservationRegistryWriter,
 ) -> RejectedObservation:
     """记录 Runtime 在 Tool 调用前发现的文件版本冲突。"""
 
@@ -143,7 +143,7 @@ def record_read_file_snapshot_failure(
     action: AcceptedReadFileToolAction,
     mismatch: ReadFileVersionMismatchError,
     *,
-    observations: InMemoryObservationRegistry,
+    observations: ObservationRegistryWriter,
 ) -> FailedObservation:
     """记录 Tool 已读取字节后发现的版本冲突失败。"""
 

@@ -21,7 +21,7 @@ from forgemind.schema.observations import (
     TerminalObservation,
 )
 from forgemind.schema.run_command import RunCommandResult
-from forgemind.state.observation_registry import InMemoryObservationRegistry
+from forgemind.state.observation_registry import ObservationRegistryWriter
 from forgemind.tools.run_command import (
     CommandProcessStartError,
     CommandProcessTimeoutError,
@@ -41,7 +41,7 @@ def record_run_command_rejection(
         | InvalidProgramPolicyError
     ),
     *,
-    observations: InMemoryObservationRegistry,
+    observations: ObservationRegistryWriter,
 ) -> RejectedObservation:
     """把 Tool 调用前的策略拦截登记为 rejected。"""
 
@@ -86,7 +86,7 @@ def record_run_command_failure(
     action: AcceptedRunCommandToolAction,
     failure: CommandProcessStartError | CommandProcessTimeoutError,
     *,
-    observations: InMemoryObservationRegistry,
+    observations: ObservationRegistryWriter,
 ) -> FailedObservation:
     """把进程启动失败或超时登记为 failed。"""
 
@@ -135,7 +135,7 @@ def record_run_command_success(
     context: ResolvedCommandContext,
     result: RunCommandResult,
     *,
-    observations: InMemoryObservationRegistry,
+    observations: ObservationRegistryWriter,
 ) -> RunCommandSuccessObservation:
     """核对真实结果与权威上下文后，登记 success。"""
 
@@ -177,7 +177,7 @@ def execute_run_command_action(
     *,
     project_root: Path,
     allowed_programs: Mapping[str, Path],
-    observations: InMemoryObservationRegistry,
+    observations: ObservationRegistryWriter,
 ) -> TerminalObservation:
     """执行已接受且已获授权的 run_command Action，并登记终态。"""
 

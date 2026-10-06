@@ -9,7 +9,7 @@ from forgemind.schema.observations import (
     ObservationErrorDetail,
     RejectedObservation,
 )
-from forgemind.state.observation_registry import InMemoryObservationRegistry
+from forgemind.state.observation_registry import ObservationRegistryWriter
 
 
 class UnsafeProjectPathError(ValueError):
@@ -68,7 +68,7 @@ def record_read_file_path_rejection(
     action: AcceptedReadFileToolAction,
     unsafe_path: UnsafeProjectPathError,
     *,
-    observations: InMemoryObservationRegistry,
+    observations: ObservationRegistryWriter,
 ) -> RejectedObservation:
     """把 Runtime 的项目外路径拦截记录为 rejected Observation。"""
 

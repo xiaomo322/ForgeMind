@@ -18,7 +18,7 @@ from forgemind.schema.observations import (
     TerminalObservation,
 )
 from forgemind.schema.run_tests import RunTestsResult
-from forgemind.state.observation_registry import InMemoryObservationRegistry
+from forgemind.state.observation_registry import ObservationRegistryWriter
 from forgemind.tools.run_tests import (
     PytestProcessStartError,
     PytestProcessTimeoutError,
@@ -70,7 +70,7 @@ def record_run_tests_target_rejection(
     action: AcceptedRunTestsToolAction,
     failure: UnsafeProjectPathError | InvalidTestTargetError,
     *,
-    observations: InMemoryObservationRegistry,
+    observations: ObservationRegistryWriter,
 ) -> RejectedObservation:
     """把 Tool 调用前的测试目标拦截登记为 rejected。"""
 
@@ -116,7 +116,7 @@ def record_run_tests_failure(
         | PytestReportInvalidError
     ),
     *,
-    observations: InMemoryObservationRegistry,
+    observations: ObservationRegistryWriter,
 ) -> FailedObservation:
     """把 pytest 启动、超时或报告失败登记为 failed。"""
 
@@ -201,7 +201,7 @@ def record_run_tests_success(
     action: AcceptedRunTestsToolAction,
     result: RunTestsResult,
     *,
-    observations: InMemoryObservationRegistry,
+    observations: ObservationRegistryWriter,
 ) -> RunTestsSuccessObservation:
     """核对 pytest 结果后，登记并返回成功执行事实。"""
 
@@ -222,7 +222,7 @@ def execute_run_tests_action(
     action: AcceptedRunTestsToolAction,
     *,
     project_root: Path,
-    observations: InMemoryObservationRegistry,
+    observations: ObservationRegistryWriter,
 ) -> TerminalObservation:
     """执行已接受的 run_tests Action，并登记唯一终态事实。"""
 

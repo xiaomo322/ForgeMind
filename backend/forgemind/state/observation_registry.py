@@ -1,5 +1,15 @@
+from typing import Protocol
+
 from forgemind.schema.observations import TerminalObservation
 from forgemind.state.action_registry import InMemoryActionRegistry
+
+
+class ObservationRegistryWriter(Protocol):
+    """Runtime 执行阶段需要的最小终态事实写入能力。"""
+
+    def record(self, observation: TerminalObservation) -> None:
+        """为已接受的 Action 登记唯一终态 Observation。"""
+        ...
 
 
 class UnknownActionIdError(ValueError):

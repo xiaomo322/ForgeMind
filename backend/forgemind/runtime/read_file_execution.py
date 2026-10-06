@@ -23,7 +23,7 @@ from forgemind.schema.observations import (
     TerminalObservation,
 )
 from forgemind.schema.read_file import ReadFileResult
-from forgemind.state.observation_registry import InMemoryObservationRegistry
+from forgemind.state.observation_registry import ObservationRegistryWriter
 from forgemind.tools.read_file import (
     ReadFileNotFoundError,
     ReadFileSystemError,
@@ -191,7 +191,7 @@ def record_read_file_tool_failure(
     failure: ReadFileToolError,
     *,
     resolved_path: Path,
-    observations: InMemoryObservationRegistry,
+    observations: ObservationRegistryWriter,
 ) -> FailedObservation:
     """核对 Tool 目标后，把读取失败登记为 failed Observation。"""
 
@@ -265,7 +265,7 @@ def record_read_file_processing_failure(
     action: AcceptedReadFileToolAction,
     failure: UnicodeDecodeError | ReadFileStartLineOutOfRangeError,
     *,
-    observations: InMemoryObservationRegistry,
+    observations: ObservationRegistryWriter,
 ) -> FailedObservation:
     """登记 read_file 已取得字节、但文本处理失败的事实。"""
 
@@ -282,7 +282,7 @@ def record_read_file_success(
     action: AcceptedReadFileToolAction,
     result: ReadFileResult,
     *,
-    observations: InMemoryObservationRegistry,
+    observations: ObservationRegistryWriter,
 ) -> ReadFileSuccessObservation:
     """形成 read_file 成功事实，登记到 State 后再返回。"""
 
@@ -304,7 +304,7 @@ def execute_read_file_action(
     action: AcceptedReadFileToolAction,
     *,
     project_root: Path,
-    observations: InMemoryObservationRegistry,
+    observations: ObservationRegistryWriter,
 ) -> TerminalObservation:
     """执行一个已接受的 read_file Action，并登记唯一终态事实。"""
 

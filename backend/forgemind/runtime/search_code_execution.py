@@ -18,7 +18,7 @@ from forgemind.schema.observations import (
     TerminalObservation,
 )
 from forgemind.schema.search_code import SearchCodeResult
-from forgemind.state.observation_registry import InMemoryObservationRegistry
+from forgemind.state.observation_registry import ObservationRegistryWriter
 from forgemind.tools.search_code import (
     SearchScopeNotFoundError,
     search_python_code,
@@ -48,7 +48,7 @@ def record_search_scope_rejection(
     action: AcceptedSearchCodeToolAction,
     failure: UnsafeProjectPathError | UnsupportedSearchScopeError,
     *,
-    observations: InMemoryObservationRegistry,
+    observations: ObservationRegistryWriter,
 ) -> RejectedObservation:
     """把 Tool 调用前的 scope 拦截登记为 rejected。"""
 
@@ -86,7 +86,7 @@ def record_search_scope_missing(
     failure: SearchScopeNotFoundError,
     *,
     resolved_scope: Path,
-    observations: InMemoryObservationRegistry,
+    observations: ObservationRegistryWriter,
 ) -> FailedObservation:
     """记录 Tool 执行阶段确认搜索范围不存在的事实。"""
 
@@ -110,7 +110,7 @@ def record_search_failure(
     action: AcceptedSearchCodeToolAction,
     failure: OSError,
     *,
-    observations: InMemoryObservationRegistry,
+    observations: ObservationRegistryWriter,
 ) -> FailedObservation:
     """记录搜索过程未能启动或完成的系统错误。"""
 
@@ -137,7 +137,7 @@ def record_search_success(
     action: AcceptedSearchCodeToolAction,
     result: SearchCodeResult,
     *,
-    observations: InMemoryObservationRegistry,
+    observations: ObservationRegistryWriter,
 ) -> SearchCodeSuccessObservation:
     """核对 search_code 结果后，登记并返回成功事实。"""
 
@@ -163,7 +163,7 @@ def execute_search_code_action(
     action: AcceptedSearchCodeToolAction,
     *,
     project_root: Path,
-    observations: InMemoryObservationRegistry,
+    observations: ObservationRegistryWriter,
 ) -> TerminalObservation:
     """执行已接受的 search_code Action，并登记唯一终态事实。"""
 

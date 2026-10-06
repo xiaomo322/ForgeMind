@@ -18,7 +18,7 @@ from forgemind.schema.observations import (
     RejectedObservation,
     TerminalObservation,
 )
-from forgemind.state.observation_registry import InMemoryObservationRegistry
+from forgemind.state.observation_registry import ObservationRegistryWriter
 from forgemind.tools.edit_file import (
     EditFileVersionChangedError,
     EditFileVersionMismatchError,
@@ -58,7 +58,7 @@ def record_edit_file_path_rejection(
     action: AcceptedEditFileToolAction,
     failure: UnsafeProjectPathError,
     *,
-    observations: InMemoryObservationRegistry,
+    observations: ObservationRegistryWriter,
 ) -> RejectedObservation:
     """把项目外路径拦截登记为 rejected。"""
 
@@ -82,7 +82,7 @@ def record_edit_file_path_rejection(
 def record_edit_file_no_change_rejection(
     action: AcceptedEditFileToolAction,
     *,
-    observations: InMemoryObservationRegistry,
+    observations: ObservationRegistryWriter,
 ) -> RejectedObservation:
     """在调用 Tool 前拒绝 old_text 与 new_text 相同的 Action。"""
 
@@ -104,7 +104,7 @@ def record_edit_file_read_failure(
     failure: ReadFileToolError,
     *,
     resolved_path: Path,
-    observations: InMemoryObservationRegistry,
+    observations: ObservationRegistryWriter,
 ) -> FailedObservation:
     """把 edit_file 读取目标快照时的失败登记为 failed。"""
 
@@ -163,7 +163,7 @@ def record_edit_file_preparation_failure(
         | EditTargetAmbiguousError
     ),
     *,
-    observations: InMemoryObservationRegistry,
+    observations: ObservationRegistryWriter,
 ) -> FailedObservation:
     """把快照校验或精确匹配失败登记为 failed。"""
 
@@ -216,7 +216,7 @@ def record_edit_file_write_failure(
     action: AcceptedEditFileToolAction,
     failure: EditFileVersionChangedError | EditFileWriteError,
     *,
-    observations: InMemoryObservationRegistry,
+    observations: ObservationRegistryWriter,
 ) -> FailedObservation:
     """把最终版本复查或原子写入失败登记为 failed。"""
 
@@ -260,7 +260,7 @@ def record_edit_file_success(
     action: AcceptedEditFileToolAction,
     prepared: PreparedEdit,
     *,
-    observations: InMemoryObservationRegistry,
+    observations: ObservationRegistryWriter,
 ) -> EditFileSuccessObservation:
     """根据已经写入的准备结果登记 edit_file 成功事实。"""
 
@@ -284,7 +284,7 @@ def execute_edit_file_action(
     action: AcceptedEditFileToolAction,
     *,
     project_root: Path,
-    observations: InMemoryObservationRegistry,
+    observations: ObservationRegistryWriter,
 ) -> TerminalObservation:
     """执行一个已获批准的 edit_file Action 并登记唯一终态。"""
 

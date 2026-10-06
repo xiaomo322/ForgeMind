@@ -25,7 +25,7 @@ from forgemind.schema.permissions import (
     PermissionDecision,
 )
 from forgemind.state.action_registry import InMemoryActionRegistry
-from forgemind.state.observation_registry import InMemoryObservationRegistry
+from forgemind.state.observation_registry import ObservationRegistryWriter
 from forgemind.state.permission_decision_registry import (
     InMemoryPermissionDecisionRegistry,
 )
@@ -243,7 +243,7 @@ def record_permission_rejection(
     action: AcceptedToolAction,
     permission_check: PermissionCheckResult,
     *,
-    observations: InMemoryObservationRegistry,
+    observations: ObservationRegistryWriter,
 ) -> RejectedObservation:
     """创建并记录 Runtime 在执行工具前产生的权限拒绝事实。
 

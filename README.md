@@ -86,6 +86,7 @@ docs/         # 01–16 正式设计文档和开发日志
 - `OpenAICompatibleAgentModel` 已实现现有供应商无关 `AgentModel` 契约，严格传递 system/user 消息、JSON object 模式与模型原始文本。
 - `forgemind-model-smoke` 已完成一次 DeepSeek 真实调用；合法 `search_code` 输出通过现有 Decision Parser，且冒烟入口不会登记或执行 Action。
 - `search_code` 应用级 handler 已把模型 Decision、Runtime 权威编号、SQLite Action、受限 Tool 执行和 SQLite Observation 连接为单轮闭环，并在副作用前重新检查任务仍为 RUNNING。
+- `read_file` 应用级 handler 已接入同一单轮闭环；分段结果的真实内容、版本与 `eof=false` 会持久化供下一轮 Agent 使用。
 - Runtime 可把 AskUserDecision 转换为带权威 task_id/action_id 的 AcceptedAskUserAction，尚未接入通用 Registry。
 - 内存 Action Registry 已使用两层 AcceptedAction 联合，Tool 与 AskUserAction 共用不可覆盖的 ID 空间。
 - 新建 SQLite Action Registry 已能保存和严格恢复 Tool/AskUserAction，并交叉核对通用索引列与完整 JSON。
@@ -99,6 +100,6 @@ docs/         # 01–16 正式设计文档和开发日志
 
 ## 当前学习进度
 
-当前学习真实模型进入 Agent Loop 的边界（更新于 2026-10-06）。五个 Tool V0.1 均已形成完整证据链；`ask_user` 从 Agent Decision、WAITING_USER、持久化用户响应到后续状态的两条链路已完成。供应商无关的单轮 Agent 入口现已与确定性 Runtime 分派组合为可运行 Loop Step。模型 system 消息包含由严格 `AgentDecision` 自动生成的 JSON Schema，OpenAI 兼容适配器从 `config/model.toml` 和环境变量建立真实 DeepSeek 客户端。安全冒烟入口已取得真实 `search_code` JSON 并通过 Parser。`search_code` 现已进一步接入应用级 handler：假模型端到端测试证明 Decision 经 Runtime 分配 `action_id`、写入 SQLite、执行受限搜索并登记终态 Observation；任务状态在模型思考期间变化时不会登记旧 Decision。下一步按同一结构接入 `read_file`，再处理需要权限的 edit/test/command handler。ForgeMind 测试 553 项通过；另有 2 项未提交 FastAPI 学习测试因固定 task_id 期望与随机 UUID 实现不一致而失败。详细设计演进见 `docs/06-数据结构设计.md`，逐步开发记录见 `docs/16-项目开发日志.md`。
+当前学习真实模型进入 Agent Loop 的边界（更新于 2026-10-06）。五个 Tool V0.1 均已形成完整证据链；`ask_user` 从 Agent Decision、WAITING_USER、持久化用户响应到后续状态的两条链路已完成。供应商无关的单轮 Agent 入口现已与确定性 Runtime 分派组合为可运行 Loop Step。模型 system 消息包含由严格 `AgentDecision` 自动生成的 JSON Schema，OpenAI 兼容适配器从 `config/model.toml` 和环境变量建立真实 DeepSeek 客户端。安全冒烟入口已取得真实 `search_code` JSON 并通过 Parser。`search_code` 与 `read_file` 现已接入应用级 handler：两者都会在副作用前重查 RUNNING 状态，由 Runtime 分配 `action_id`，将 Action、受限 Tool 结果和终态 Observation 写入 SQLite；分段读取的 `eof=false` 会原样进入下一轮上下文。下一步处理 edit_file、run_tests、run_command 的逐 Action 权限流程。ForgeMind 测试 556 项通过；另有 2 项未提交 FastAPI 学习测试因固定 task_id 期望与随机 UUID 实现不一致而失败。详细设计演进见 `docs/06-数据结构设计.md`，逐步开发记录见 `docs/16-项目开发日志.md`。
 
 每个切片只处理一个主要概念，并明确留出核心代码由用户先写；AI 提供脚手架、测试和基于真实错误的 Debug 支持。
