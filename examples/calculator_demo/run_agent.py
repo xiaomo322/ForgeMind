@@ -5,6 +5,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from pydantic_core import to_jsonable_python
+
+from forgemind.agent.loop import AgentLoopStepResult
 from forgemind.agent.openai_compatible_model import (
     create_openai_compatible_agent_model,
 )
@@ -41,6 +44,35 @@ def print_task_state(app: ForgeMindApplication, task_id: str) -> None:
     print(
         json.dumps(
             view.model_dump(mode="json"),
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
+
+
+def print_agent_step(
+    step_number: int,
+    step: AgentLoopStepResult[object],
+) -> None:
+    """逐轮展示模型看到的上下文、原始回复和 Runtime 结果。"""
+
+    print(f"\n{'=' * 24} Agent 第 {step_number} 轮 {'=' * 24}")
+
+    # system 消息包含完整 JSON Schema，内容很长。这里重点打印 user 消息，
+    # 它就是本轮由 SQLite 权威 State 生成的任务上下文。
+    print("\n[发送给模型的任务上下文]")
+    print(step.turn_result.turn_input.messages[-1].content)
+
+    print("\n[模型原始回复]")
+    print(step.turn_result.raw_response)
+
+    print("\n[严格解析后的 Decision]")
+    print(step.turn_result.decision_result.model_dump_json(indent=2))
+
+    print("\n[Runtime 处理结果]")
+    print(
+        json.dumps(
+            to_jsonable_python(step.dispatch_result),
             ensure_ascii=False,
             indent=2,
         )
@@ -105,7 +137,11 @@ def main() -> None:
     print(f"已创建任务：{task.task_id}")
 
     while True:
-        result = app.run_until_pause(task.task_id, max_steps=10)
+        result = app.run_until_pause(
+            task.task_id,
+            max_steps=10,
+            on_step=print_agent_step,
+        )
         print(f"\n当前状态：{result.status.value}")
 
         if result.parse_failure is not None:

@@ -147,12 +147,17 @@ state = SQLiteForgeMindState.open(Path(".forgemind/state.db"))
 app = ForgeMindApplication(state=state, model=model)
 
 task = app.create_task("修复 add 函数并运行测试", Path("你的项目目录"))
-result = app.run_until_pause(task.task_id)
+result = app.run_until_pause(
+    task.task_id,
+    on_step=lambda number, step: print(step.turn_result.raw_response),
+)
 print(result.status)
 ```
 
 包含用户询问和权限确认循环的完整示例位于
-`examples/calculator_demo/run_agent.py`。
+`examples/calculator_demo/run_agent.py`。示例会逐轮打印模型输入上下文、原始
+JSON 回复、严格解析后的 Decision 和 Runtime 结果。模型服务内部未返回的隐藏
+思维链不可读取；Decision 的 `reason` 是可记录、可审计的决策理由。
 
 当前 MVP 已接通真实模型、多轮 Agent Loop、七种 Decision 路由、五种
 Tool、用户询问、逐 Action 权限、SQLite 重启恢复、显式完成状态和 CLI。

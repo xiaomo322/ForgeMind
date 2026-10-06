@@ -94,8 +94,10 @@ class ForgeMindApplication:
         task_id: str,
         *,
         max_steps: int = 20,
+        on_step: Callable[[int, AgentLoopStepResult[object]], None]
+        | None = None,
     ) -> ApplicationRunResult:
-        """连续运行立即型步骤，直到等待、完成或解析失败。"""
+        """连续运行立即型步骤，并可逐轮报告模型与 Runtime 结果。"""
 
         if max_steps < 1:
             raise ValueError("max_steps 必须至少为 1")
@@ -118,6 +120,10 @@ class ForgeMindApplication:
                 handlers=build_runtime_handlers(task_id=task_id, state=self.state),
                 max_action_count=self.max_action_count,
             )
+            # 回调发生在模型原文已经保留、Runtime 分派已经完成之后。
+            # 调用方可以打印或记录本轮证据，但不能改写不可变结果。
+            if on_step is not None:
+                on_step(step_number, last_step)
             if isinstance(last_step.dispatch_result, AgentDecisionParseFailure):
                 return ApplicationRunResult(
                     task_id,

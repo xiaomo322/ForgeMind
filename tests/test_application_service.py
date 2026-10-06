@@ -58,12 +58,37 @@ def test_application_runs_immediate_tools_until_complete(tmp_path: Path) -> None
         next_task_status_id=lambda: "status-001",
     )
 
-    result = app.run_until_pause(task.task_id, max_steps=5)
+    observed_steps: list[tuple[int, object]] = []
+    result = app.run_until_pause(
+        task.task_id,
+        max_steps=5,
+        on_step=lambda number, step: observed_steps.append((number, step)),
+    )
 
     assert result.status is TaskStatus.COMPLETED
     assert result.steps_executed == 2
     assert len(model.inputs) == 2
     assert len(state.get_task_view(task.task_id).actions) == 2
+    assert [number for number, _ in observed_steps] == [1, 2]
+    assert [
+        step.turn_result.raw_response for _, step in observed_steps
+    ] == [
+        _json(
+            {
+                "action_type": "tool_call",
+                "tool_name": "search_code",
+                "arguments": {"query": "value", "scope": "."},
+                "reason": "定位代码",
+            }
+        ),
+        _json(
+            {
+                "action_type": "complete",
+                "reason": "已经取得所需证据",
+                "summary": "定位完成",
+            }
+        ),
+    ]
 
 
 def test_application_stops_on_parse_failure_without_inventing_action(
