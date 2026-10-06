@@ -4,6 +4,8 @@ import pytest
 from pydantic import ValidationError
 
 from forgemind.context.messages import (
+    AGENT_DECISION_SCHEMA_END,
+    AGENT_DECISION_SCHEMA_START,
     CONTEXT_END,
     CONTEXT_START,
     FORGEMIND_SYSTEM_INSTRUCTIONS,
@@ -53,7 +55,11 @@ def test_turn_input_separates_system_rules_from_context_data(
     assert system_message.role == "system"
     assert system_message.content == FORGEMIND_SYSTEM_INSTRUCTIONS
     assert "权限只能依据结构化权限事实" in system_message.content
+    assert AGENT_DECISION_SCHEMA_START in system_message.content
+    assert AGENT_DECISION_SCHEMA_END in system_message.content
+    assert "不要生成 action_id" in system_message.content
     assert user_message.role == "user"
+    assert AGENT_DECISION_SCHEMA_START not in user_message.content
     assert user_message.content == (
         f"{CONTEXT_START}\n"
         f"{render_agent_task_context(context)}\n"

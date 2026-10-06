@@ -27,7 +27,7 @@
 - Consumes: `forgemind.schema.decisions.AgentDecision`
 - Produces: `build_agent_decision_output_contract() -> str`、`AGENT_DECISION_SCHEMA_START`、`AGENT_DECISION_SCHEMA_END`
 
-- [ ] **Step 1: 写协议行为测试**
+- [x] **Step 1: 写协议行为测试**
 
 ```python
 import json
@@ -63,7 +63,7 @@ def test_output_contract_states_non_negotiable_output_rules() -> None:
     assert "Runtime" in contract
 ```
 
-- [ ] **Step 2: 运行测试并确认先失败**
+- [x] **Step 2: 运行测试并确认先失败**
 
 Run:
 
@@ -73,7 +73,7 @@ F:\anaconda3\python.exe -m pytest tests\test_agent_output_contract.py -q -p no:c
 
 Expected: 测试收集阶段因三个新接口尚不存在而失败。
 
-- [ ] **Step 3: 在 messages.py 加入导入、适配器和中文步骤注释骨架**
+- [x] **Step 3: 在 messages.py 加入导入、适配器和中文步骤注释骨架**
 
 ```python
 import json
@@ -97,7 +97,7 @@ def build_agent_decision_output_contract() -> str:
     raise NotImplementedError("请完成 Agent 输出协议生成")
 ```
 
-- [ ] **Step 4: 由学习者完成核心函数**
+- [x] **Step 4: 由学习者完成核心函数**
 
 目标实现：
 
@@ -121,7 +121,7 @@ def build_agent_decision_output_contract() -> str:
     )
 ```
 
-- [ ] **Step 5: 运行协议测试并确认通过**
+- [x] **Step 5: 运行协议测试并确认通过**
 
 Run: 与 Step 2 相同。
 
@@ -140,7 +140,7 @@ Expected: `2 passed`。
 - Consumes: `build_agent_decision_output_contract() -> str`
 - Produces: 包含固定安全规则和完整输出协议的 `FORGEMIND_SYSTEM_INSTRUCTIONS`
 
-- [ ] **Step 1: 扩展 system 消息测试**
+- [x] **Step 1: 扩展 system 消息测试**
 
 在 `test_turn_input_separates_system_rules_from_context_data` 中加入：
 
@@ -153,7 +153,7 @@ Expected: `2 passed`。
 
 并从 `forgemind.context.messages` 导入两个 Schema 标记常量。
 
-- [ ] **Step 2: 运行测试并确认先失败**
+- [x] **Step 2: 运行测试并确认先失败**
 
 Run:
 
@@ -163,7 +163,7 @@ F:\anaconda3\python.exe -m pytest tests\test_agent_context_messages.py -q -p no:
 
 Expected: system 消息尚未包含 Schema 标记，断言失败。
 
-- [ ] **Step 3: 把协议追加到固定 system 指令**
+- [x] **Step 3: 把协议追加到固定 system 指令**
 
 先把现有安全规则改名为 `_FORGEMIND_BASE_SYSTEM_INSTRUCTIONS`，然后构造公开常量：
 
@@ -178,7 +178,7 @@ FORGEMIND_SYSTEM_INSTRUCTIONS = (
 
 `build_agent_turn_input()` 继续使用 `FORGEMIND_SYSTEM_INSTRUCTIONS`，无需修改消息顺序或 user Context。
 
-- [ ] **Step 4: 运行输出协议与 Agent 相关测试**
+- [x] **Step 4: 运行输出协议与 Agent 相关测试**
 
 Run:
 
@@ -188,7 +188,7 @@ F:\anaconda3\python.exe -m pytest tests\test_agent_output_contract.py tests\test
 
 Expected: `11 passed`。
 
-- [ ] **Step 5: 运行完整回归**
+- [x] **Step 5: 运行完整回归**
 
 Run:
 
@@ -198,7 +198,7 @@ F:\anaconda3\python.exe -m pytest -q -p no:cacheprovider --basetemp=tests\.tmp-a
 
 Expected: 现有 532 项加本切片 2 项，共 `534 passed`。
 
-- [ ] **Step 6: 更新进度并提交**
+- [x] **Step 6: 更新进度并提交**
 
 更新 `README.md`、`docs/06-数据结构设计.md` 和 `docs/16-项目开发日志.md`，只记录已实现行为与真实测试数字。
 
