@@ -27,8 +27,12 @@ def test_task_status_record_requires_positive_revision() -> None:
         (TaskStatus.RUNNING, TaskStatus.BLOCKED),
         (TaskStatus.RUNNING, TaskStatus.CANCELLED),
         (TaskStatus.WAITING_USER, TaskStatus.RUNNING),
+        (TaskStatus.WAITING_USER, TaskStatus.EXECUTING),
+        (TaskStatus.EXECUTING, TaskStatus.RUNNING),
         (TaskStatus.WAITING_USER, TaskStatus.BLOCKED),
         (TaskStatus.WAITING_USER, TaskStatus.CANCELLED),
+        (TaskStatus.EXECUTING, TaskStatus.BLOCKED),
+        (TaskStatus.EXECUTING, TaskStatus.CANCELLED),
     ],
 )
 def test_allowed_task_status_transitions_do_not_raise(
@@ -44,6 +48,9 @@ def test_allowed_task_status_transitions_do_not_raise(
         (TaskStatus.RUNNING, TaskStatus.RUNNING),
         (TaskStatus.WAITING_USER, TaskStatus.WAITING_USER),
         (TaskStatus.WAITING_USER, TaskStatus.COMPLETED),
+        (TaskStatus.RUNNING, TaskStatus.EXECUTING),
+        (TaskStatus.EXECUTING, TaskStatus.EXECUTING),
+        (TaskStatus.EXECUTING, TaskStatus.COMPLETED),
         (TaskStatus.COMPLETED, TaskStatus.RUNNING),
         (TaskStatus.BLOCKED, TaskStatus.RUNNING),
         (TaskStatus.CANCELLED, TaskStatus.RUNNING),

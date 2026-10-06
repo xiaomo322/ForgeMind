@@ -35,12 +35,12 @@
 - Produces: `EditExecutionPlan`, `SQLiteEditExecutionPlanRegistry`, `TaskStatus.EXECUTING`.
 - Produces: `record_permission_approval_executing(decision, plan, executing_status)`.
 
-- [ ] Add failing tests for strict plan fields, restart persistence, unique action plan, and `WAITING_USER -> EXECUTING -> RUNNING`.
-- [ ] Run focused tests and confirm missing enum/schema/registry failures.
-- [ ] Implement strict plan schema and SQLite registry with JSON/index cross-checks.
-- [ ] Wire the registry into `SQLiteForgeMindState.open()` and task views needed by recovery.
-- [ ] Implement atomic approval + plan + EXECUTING transaction with current-action validation.
-- [ ] Run focused tests and commit `feat: persist approved edit execution plans`.
+- [x] Add failing tests for strict plan fields, restart persistence, unique action plan, and `WAITING_USER -> EXECUTING -> RUNNING`.
+- [x] Run focused tests and confirm missing enum/schema/registry failures.
+- [x] Implement strict plan schema and SQLite registry with JSON/index cross-checks.
+- [x] Wire the registry into `SQLiteForgeMindState.open()` and task views needed by recovery.
+- [x] Implement atomic approval + plan + EXECUTING transaction with current-action validation.
+- [x] Run focused tests and commit `feat: persist approved edit execution plans`.
 
 ### Task 2: edit_file 批准执行与崩溃恢复
 

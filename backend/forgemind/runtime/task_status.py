@@ -35,6 +35,14 @@ _ALLOWED_TASK_STATUS_TRANSITIONS: dict[
     TaskStatus.WAITING_USER: frozenset(
         {
             TaskStatus.RUNNING,
+            TaskStatus.EXECUTING,
+            TaskStatus.BLOCKED,
+            TaskStatus.CANCELLED,
+        }
+    ),
+    TaskStatus.EXECUTING: frozenset(
+        {
+            TaskStatus.RUNNING,
             TaskStatus.BLOCKED,
             TaskStatus.CANCELLED,
         }

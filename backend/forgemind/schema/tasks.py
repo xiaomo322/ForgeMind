@@ -54,6 +54,9 @@ class TaskStatus(StrEnum):
 
     RUNNING = "running"
     WAITING_USER = "waiting_user"
+    # 用户已经批准，Runtime 正在处理外部副作用。这个状态会阻止 Agent
+    # 在上一次 Tool 尚未形成终态事实时继续生成新 Decision。
+    EXECUTING = "executing"
     COMPLETED = "completed"
     BLOCKED = "blocked"
     CANCELLED = "cancelled"

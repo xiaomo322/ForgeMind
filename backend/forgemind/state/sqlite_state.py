@@ -8,6 +8,7 @@ from typing import Self
 from forgemind.runtime.task_status import require_task_status_transition
 from forgemind.runtime.user_responses import validate_user_response_for_question
 from forgemind.schema.actions import AcceptedAskUserAction, AcceptedToolAction
+from forgemind.schema.execution import EditExecutionPlan
 from forgemind.schema.interactions import UserResponseRecord, UserResponseType
 from forgemind.schema.observations import (
     ObservationErrorCode,
@@ -28,6 +29,10 @@ from forgemind.schema.tasks import (
 from forgemind.state.sqlite_action_registry import SQLiteActionRegistry
 from forgemind.state.action_registry import DuplicateActionIdError
 from forgemind.state.sqlite_connection import open_sqlite_connection
+from forgemind.state.sqlite_edit_execution_plan_registry import (
+    DuplicateEditExecutionPlanError,
+    SQLiteEditExecutionPlanRegistry,
+)
 from forgemind.state.sqlite_observation_registry import (
     SQLiteObservationRegistry,
 )
@@ -121,6 +126,26 @@ class PermissionRejectionNotCurrentError(ValueError):
     """用户拒绝的权限请求不属于当前最新 Action。"""
 
 
+class PermissionApprovalTaskMismatchError(ValueError):
+    """批准决定、执行计划和执行状态没有引用同一任务。"""
+
+
+class InvalidPermissionApprovalDecisionError(ValueError):
+    """批准执行流程只接受用户的 APPROVE 决定。"""
+
+
+class InvalidPermissionApprovalExecutingStatusError(ValueError):
+    """批准执行流程必须先进入 EXECUTING 状态。"""
+
+
+class PermissionApprovalRequiresWaitingStatusError(ValueError):
+    """只有等待用户授权的任务才能进入批准执行阶段。"""
+
+
+class PermissionApprovalNotCurrentError(ValueError):
+    """用户批准的权限请求不属于当前最新 Action。"""
+
+
 class UserAnswerStatusTaskMismatchError(ValueError):
     """用户回答与恢复状态没有引用同一任务。"""
 
@@ -171,7 +196,181 @@ class SQLiteForgeMindState:
     user_responses: SQLiteUserResponseRegistry
     permission_requests: SQLitePermissionRequestRegistry
     permission_decisions: SQLitePermissionDecisionRegistry
+    edit_execution_plans: SQLiteEditExecutionPlanRegistry
     observations: SQLiteObservationRegistry
+
+    def record_permission_approval_executing(
+        self,
+        decision: PermissionDecisionRecord,
+        plan: EditExecutionPlan,
+        executing_status: TaskStatusRecord,
+    ) -> None:
+        """原子保存批准决定、edit_file 执行计划与 EXECUTING 状态。"""
+
+        if not (
+            decision.task_id == plan.task_id == executing_status.task_id
+            and decision.action_id == plan.action_id
+        ):
+            raise PermissionApprovalTaskMismatchError
+        if decision.decision is not PermissionDecision.APPROVE:
+            raise InvalidPermissionApprovalDecisionError
+        if executing_status.status is not TaskStatus.EXECUTING:
+            raise InvalidPermissionApprovalExecutingStatusError
+
+        try:
+            request = self.permission_requests.get(
+                decision.permission_request_id
+            )
+        except KeyError:
+            raise UnknownPermissionRequestIdError(
+                decision.permission_request_id
+            ) from None
+        if (
+            request.task_id != decision.task_id
+            or request.action_id != decision.action_id
+        ):
+            raise PermissionDecisionRequestMismatchError(
+                decision.permission_request_id
+            )
+        action = self.actions.get(decision.action_id)
+        SQLiteEditExecutionPlanRegistry.validate_action_snapshot(plan, action)
+
+        decision_payload_json = decision.model_dump_json()
+        status_payload_json = executing_status.model_dump_json()
+        try:
+            with open_sqlite_connection(self.database_path) as connection:
+                connection.execute("PRAGMA foreign_keys = ON")
+                connection.execute("BEGIN IMMEDIATE")
+
+                latest_status_row = connection.execute(
+                    """
+                    SELECT task_status_id, task_id, revision,
+                           status, payload_json
+                    FROM task_statuses
+                    WHERE task_id = ?
+                    ORDER BY revision DESC
+                    LIMIT 1
+                    """,
+                    (decision.task_id,),
+                ).fetchone()
+                if latest_status_row is None:
+                    raise KeyError(decision.task_id)
+                latest_status_id, *stored_status = latest_status_row
+                current = SQLiteTaskStatusRegistry._restore(
+                    latest_status_id,
+                    stored_status,
+                )
+                if current.status is not TaskStatus.WAITING_USER:
+                    raise PermissionApprovalRequiresWaitingStatusError
+                expected_revision = current.revision + 1
+                if executing_status.revision != expected_revision:
+                    raise NonSequentialTaskStatusRevisionError(
+                        decision.task_id,
+                        expected_revision,
+                        executing_status.revision,
+                    )
+                require_task_status_transition(
+                    current.status,
+                    executing_status.status,
+                )
+
+                latest_action_row = connection.execute(
+                    """
+                    SELECT action_id
+                    FROM actions
+                    WHERE task_id = ?
+                    ORDER BY task_sequence DESC
+                    LIMIT 1
+                    """,
+                    (decision.task_id,),
+                ).fetchone()
+                if (
+                    latest_action_row is None
+                    or latest_action_row[0] != decision.action_id
+                ):
+                    raise PermissionApprovalNotCurrentError
+
+                connection.execute(
+                    """
+                    INSERT INTO permission_decisions (
+                        permission_decision_id, permission_request_id,
+                        task_id, action_id, decision, payload_json
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        decision.permission_decision_id,
+                        decision.permission_request_id,
+                        decision.task_id,
+                        decision.action_id,
+                        decision.decision.value,
+                        decision_payload_json,
+                    ),
+                )
+                SQLiteEditExecutionPlanRegistry.insert(connection, plan)
+                connection.execute(
+                    """
+                    INSERT INTO task_statuses (
+                        task_status_id, task_id, revision, status, payload_json
+                    )
+                    VALUES (?, ?, ?, ?, ?)
+                    """,
+                    (
+                        executing_status.task_status_id,
+                        executing_status.task_id,
+                        executing_status.revision,
+                        executing_status.status.value,
+                        status_payload_json,
+                    ),
+                )
+        except sqlite3.IntegrityError:
+            self._raise_permission_approval_executing_conflict(
+                decision,
+                plan,
+                executing_status,
+            )
+
+    def _raise_permission_approval_executing_conflict(
+        self,
+        decision: PermissionDecisionRecord,
+        plan: EditExecutionPlan,
+        executing_status: TaskStatusRecord,
+    ) -> None:
+        """回滚后把批准执行事务的唯一约束冲突分类。"""
+
+        with open_sqlite_connection(self.database_path) as connection:
+            decision_id_exists = connection.execute(
+                "SELECT 1 FROM permission_decisions WHERE permission_decision_id = ?",
+                (decision.permission_decision_id,),
+            ).fetchone()
+            request_decision_exists = connection.execute(
+                "SELECT 1 FROM permission_decisions WHERE permission_request_id = ?",
+                (decision.permission_request_id,),
+            ).fetchone()
+            plan_exists = connection.execute(
+                "SELECT 1 FROM edit_execution_plans WHERE action_id = ?",
+                (plan.action_id,),
+            ).fetchone()
+            status_exists = connection.execute(
+                "SELECT 1 FROM task_statuses WHERE task_status_id = ?",
+                (executing_status.task_status_id,),
+            ).fetchone()
+
+        if decision_id_exists is not None:
+            raise DuplicatePermissionDecisionIdError(
+                decision.permission_decision_id
+            ) from None
+        if request_decision_exists is not None:
+            raise DuplicatePermissionRequestDecisionError(
+                decision.permission_request_id
+            ) from None
+        if plan_exists is not None:
+            raise DuplicateEditExecutionPlanError(plan.action_id) from None
+        if status_exists is not None:
+            raise DuplicateTaskStatusIdError(
+                executing_status.task_status_id
+            ) from None
+        raise RuntimeError("权限批准执行记录违反未知的 SQLite 完整性约束")
 
     def record_tool_permission_waiting(
         self,
@@ -1109,6 +1308,10 @@ class SQLiteForgeMindState:
             resolved_database_path,
             permission_requests,
         )
+        edit_execution_plans = SQLiteEditExecutionPlanRegistry(
+            resolved_database_path,
+            actions,
+        )
         observations = SQLiteObservationRegistry(
             resolved_database_path,
             actions,
@@ -1122,5 +1325,6 @@ class SQLiteForgeMindState:
             user_responses=user_responses,
             permission_requests=permission_requests,
             permission_decisions=permission_decisions,
+            edit_execution_plans=edit_execution_plans,
             observations=observations,
         )
