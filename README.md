@@ -44,6 +44,8 @@ ForgeMind 是面向 Python / AI 应用开发者的项目级研发 Agent。V0.1 �
 
 ```text
 backend/forgemind/
+├── agent/    # Agent 单轮推理、Decision 解析与模型供应商适配
+├── config/   # TOML 应用配置的严格读取与校验
 ├── schema/   # 跨越 Agent、Runtime、Tool、State 边界的数据契约
 ├── runtime/  # Action 接受、权限、路径、版本和执行结果处理
 ├── tools/    # 受控读取、源码搜索和原子文件修改
@@ -80,6 +82,9 @@ docs/         # 01–16 正式设计文档和开发日志
 - Agent Decision Parser 依据 `tool_name` 把模型 JSON 严格分派为五种现有 Tool Decision，非法输出不能进入 Runtime。
 - Agent 输出解析失败会复用稳定 Schema 问题列表反馈，不生成 Action 或虚构 Tool Observation。
 - 完整 Agent Decision 已支持五种 Tool 调用和不携带 Tool 字段的 `ask_user`，并使用两层判别器严格路由。
+- `config/model.toml` 集中保存模型厂商 URL、模型名、密钥环境变量名称与超时，真实 API Key 不进入项目文件。
+- `OpenAICompatibleAgentModel` 已实现现有供应商无关 `AgentModel` 契约，严格传递 system/user 消息、JSON object 模式与模型原始文本。
+- `forgemind-model-smoke` 已完成一次 DeepSeek 真实调用；合法 `search_code` 输出通过现有 Decision Parser，且冒烟入口不会登记或执行 Action。
 - Runtime 可把 AskUserDecision 转换为带权威 task_id/action_id 的 AcceptedAskUserAction，尚未接入通用 Registry。
 - 内存 Action Registry 已使用两层 AcceptedAction 联合，Tool 与 AskUserAction 共用不可覆盖的 ID 空间。
 - 新建 SQLite Action Registry 已能保存和严格恢复 Tool/AskUserAction，并交叉核对通用索引列与完整 JSON。
@@ -89,10 +94,10 @@ docs/         # 01–16 正式设计文档和开发日志
 - 高层 ask_user Runtime 入口负责生成权威编号、构造下一状态并在提交成功后返回等待结果。
 - State 为每个任务内的 Action 分配独立连续序号，恢复历史时按照登记顺序返回，不从随机 `action_id` 推断先后。
 
-统一任务 State 及完整 Agent Loop 尚未实现。
+真实模型尚未接入应用级多轮 Loop；五种 Tool Decision 的 Runtime handlers 仍需统一组装。
 
 ## 当前学习进度
 
-当前学习 Agent 推理边界（更新于 2026-10-06）。五个 Tool V0.1 均已形成完整证据链；`ask_user` 从 Agent Decision、WAITING_USER、持久化用户响应到后续状态的两条链路已完成：ANSWER 原子恢复 RUNNING 并进入下一轮 Agent Context；CANCEL 原子进入终态 CANCELLED，不再启动 Agent 推理。供应商无关的单轮 Agent 入口现已与确定性 Runtime 分派组合为可运行 Loop Step：真实 SQLite 端到端路径能够从 RUNNING Context 和模型 AskUserDecision 原子进入 WAITING_USER，非法模型输出保持 State 不变。SQLite 连接现由统一上下文管理器负责事务提交、异常回滚和确定关闭，Windows 临时目录不会再因残留连接锁住 `state.db`。模型 system 消息已包含由严格 `AgentDecision` 自动生成的 JSON Schema 和输出边界规则。下一步接入真实大模型适配器。当前完整测试 534 项通过。详细设计演进见 `docs/06-数据结构设计.md`，逐步开发记录见 `docs/16-项目开发日志.md`。
+当前学习真实模型进入 Agent Loop 的边界（更新于 2026-10-06）。五个 Tool V0.1 均已形成完整证据链；`ask_user` 从 Agent Decision、WAITING_USER、持久化用户响应到后续状态的两条链路已完成：ANSWER 原子恢复 RUNNING 并进入下一轮 Agent Context；CANCEL 原子进入终态 CANCELLED，不再启动 Agent 推理。供应商无关的单轮 Agent 入口现已与确定性 Runtime 分派组合为可运行 Loop Step。模型 system 消息包含由严格 `AgentDecision` 自动生成的 JSON Schema，OpenAI 兼容适配器从 `config/model.toml` 和环境变量建立真实 DeepSeek 客户端。安全冒烟入口已取得真实 `search_code` JSON 并通过 Parser，同时证明解析阶段不会登记或执行 Action。下一步把这个真实 `AgentModel` 注入 Loop，并组装五种 Tool Decision 的应用级 Runtime handlers。当前完整测试 551 项通过。详细设计演进见 `docs/06-数据结构设计.md`，逐步开发记录见 `docs/16-项目开发日志.md`。
 
 每个切片只处理一个主要概念，并明确留出核心代码由用户先写；AI 提供脚手架、测试和基于真实错误的 Debug 支持。

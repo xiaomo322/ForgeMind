@@ -28,8 +28,8 @@
 **Interfaces:**
 - Produces: `ModelProviderConfig`、`ModelConfigDocument`、`load_model_provider_config(path: Path) -> ModelProviderConfig`
 
-- [ ] 写测试，覆盖正确读取、缺少 `[model]`、额外字段、空字符串和非正数超时。
-- [ ] 运行测试，确认因模块不存在而先失败。
+- [x] 写测试，覆盖正确读取、缺少 `[model]`、额外字段、空字符串和非正数超时。
+- [x] 运行测试，确认因模块不存在而先失败。
 - [ ] 创建严格配置模型：
 
 ```python
@@ -48,8 +48,8 @@ class ModelConfigDocument(StrictContractModel):
     model: ModelProviderConfig
 ```
 
-- [ ] 由学习者完成 `load_model_provider_config()` 的三步核心逻辑：二进制打开、`tomllib.load()`、严格验证并返回 `.model`。
-- [ ] 运行配置测试并确认通过。
+- [x] 由学习者完成 `load_model_provider_config()` 的三步核心逻辑：二进制打开、`tomllib.load()`、严格验证并返回 `.model`。
+- [x] 运行配置测试并确认通过。
 
 ---
 
@@ -65,8 +65,8 @@ class ModelConfigDocument(StrictContractModel):
 - Consumes: `AgentTurnInput`、`ModelProviderConfig`
 - Produces: `OpenAICompatibleAgentModel.generate()`、`create_openai_compatible_agent_model()`、`EmptyModelResponseError`、`MissingModelApiKeyError`
 
-- [ ] 使用假客户端写失败测试，核对 system/user 顺序、模型名、JSON 模式和返回文本。
-- [ ] 写空内容与缺少环境变量测试。
+- [x] 使用假客户端写失败测试，核对 system/user 顺序、模型名、JSON 模式和返回文本。
+- [x] 写空内容与缺少环境变量测试。
 - [ ] 实现适配器：
 
 ```python
@@ -82,10 +82,10 @@ response = self.client.chat.completions.create(
 content = response.choices[0].message.content
 ```
 
-- [ ] 非空字符串原样返回；`None`、空串或纯空白抛出 `EmptyModelResponseError`。
-- [ ] 工厂从 `config.api_key_env` 指定的环境变量读取密钥，并使用 `base_url` 与 `timeout_seconds` 构造 `OpenAI` 客户端。
-- [ ] 使用 `uv add openai` 写入依赖和锁文件。
-- [ ] 运行适配器聚焦测试和完整回归。
+- [x] 非空字符串原样返回；`None`、空串或纯空白抛出 `EmptyModelResponseError`。
+- [x] 工厂从 `config.api_key_env` 指定的环境变量读取密钥，并使用 `base_url` 与 `timeout_seconds` 构造 `OpenAI` 客户端。
+- [x] 使用 `uv add openai` 写入依赖和锁文件。
+- [x] 运行适配器聚焦测试和完整回归。
 
 ---
 
@@ -101,9 +101,9 @@ content = response.choices[0].message.content
 - Consumes: `config/model.toml`、`DEEPSEEK_API_KEY`
 - Produces: 只调用模型并打印原始响应与解析结果的安全 smoke test
 
-- [ ] 加载配置并创建一个最小 RUNNING 任务上下文。
-- [ ] 调用一次真实模型，打印调用阶段、原始响应和 Decision 解析结果。
-- [ ] 明确不分派 Decision、不登记 Action、不执行 Tool。
-- [ ] 未配置密钥时打印可操作错误，不回显密钥。
-- [ ] 运行单元测试；配置真实密钥后再运行联网 smoke test。
-- [ ] 只记录实际执行结果并提交。
+- [x] 加载配置并创建一个最小 RUNNING 任务上下文。
+- [x] 调用一次真实模型，打印调用阶段、原始响应和 Decision 解析结果。
+- [x] 明确不分派 Decision、不登记 Action、不执行 Tool。
+- [x] 未配置密钥时打印可操作错误，不回显密钥。
+- [x] 运行单元测试；配置真实密钥后再运行联网 smoke test。
+- [x] 只记录实际执行结果并提交。

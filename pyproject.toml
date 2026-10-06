@@ -3,9 +3,17 @@ name = "forgemind"
 version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = [
+    "openai>=3.24.0",
     "pydantic==2.10.3",
     "pytest>=8.3.4",
 ]
+
+[project.scripts]
+forgemind-model-smoke = "forgemind.agent.model_smoke:main"
+
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
 
 [project.optional-dependencies]
 dev = [
