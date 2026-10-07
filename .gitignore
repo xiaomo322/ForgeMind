@@ -2,6 +2,7 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 .test-tmp/
+tests/.tmp-*/
 .venv/
 dist/
 build/
