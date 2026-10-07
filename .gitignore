@@ -4,6 +4,7 @@ __pycache__/
 .test-tmp/
 tests/.tmp-*/
 .venv/
+node_modules/
 dist/
 build/
 *.egg-info/
