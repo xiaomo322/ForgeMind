@@ -3,6 +3,7 @@ name = "forgemind"
 version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = [
+    "fastapi>=0.142.2",
     "openai>=3.24.0",
     "pydantic==2.10.3",
     "pytest>=8.3.4",
@@ -30,3 +31,8 @@ addopts = "--basetemp=.test-tmp/pytest-user"
 
 [tool.setuptools.packages.find]
 where = ["backend"]
+
+[dependency-groups]
+dev = [
+    "httpx2>=2.13.1",
+]
