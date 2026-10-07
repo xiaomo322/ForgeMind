@@ -24,6 +24,7 @@ from forgemind.state.user_response_registry import (
 )
 from forgemind.web.agent_events import generate_agent_step_events
 from forgemind.web.events import encode_sse_event
+from forgemind.web.public_models import PublicTaskState, build_public_task_state
 from forgemind.web.workspaces import (
     DuplicateWorkspaceFilenameError,
     FileSystemWorkspaceStore,
@@ -84,6 +85,20 @@ class AnswerQuestionAccepted(StrictContractModel):
     question_action_id: str = Field(min_length=1)
     status: Literal["running"]
     revision: int = Field(ge=1)
+
+
+class PermissionDecisionRequest(StrictContractModel):
+    """浏览器对一条特定权限请求作出的明确决定。"""
+
+    decision: Literal["approve", "reject"]
+    raw_response: str = Field(min_length=1)
+
+    @field_validator("raw_response")
+    @classmethod
+    def require_visible_response(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("raw_response 不能只包含空白字符")
+        return value
 
 
 def create_agent_stream_app(
@@ -187,6 +202,45 @@ def create_agent_stream_app(
             encoded_events,
             media_type="text/event-stream",
         )
+
+    @app.get("/tasks/{task_id}", response_model=PublicTaskState)
+    def get_task_state(task_id: str) -> PublicTaskState:
+        """返回页面刷新后可以重建时间线的权威任务视图。"""
+
+        try:
+            view = application.get_task(task_id)
+        except KeyError as error:
+            raise HTTPException(status_code=404, detail="task not found") from error
+        return build_public_task_state(view)
+
+    @app.post(
+        "/tasks/{task_id}/permissions/{permission_request_id}",
+        response_model=PublicTaskState,
+    )
+    def decide_task_permission(
+        task_id: str,
+        permission_request_id: str,
+        request: PermissionDecisionRequest,
+    ) -> PublicTaskState:
+        """记录批准或拒绝，再返回数据库中的最新公开状态。"""
+
+        try:
+            application.decide_permission(
+                task_id=task_id,
+                permission_request_id=permission_request_id,
+                approve=request.decision == "approve",
+                raw_response=request.raw_response,
+            )
+            return build_public_task_state(application.get_task(task_id))
+        except KeyError as error:
+            raise HTTPException(
+                status_code=404,
+                detail="task or permission request not found",
+            ) from error
+        except (ValueError, RuntimeError) as error:
+            # 任务不再等待这条请求、请求不属于当前 Action 等状态冲突
+            # 都不能被客户端重试成一次新的授权。
+            raise HTTPException(status_code=409, detail=str(error)) from error
 
     @app.post(
         "/tasks/{task_id}/answers",
