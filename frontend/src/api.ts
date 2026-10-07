@@ -136,7 +136,12 @@ export function connectTaskEvents(
         sequence: Number(event.lastEventId),
         data: payload.data,
       } as TaskEvent);
-      if (type === "task.completed" || type === "task.failed") {
+      if (
+        type === "task.waiting_user" ||
+        type === "task.permission_required" ||
+        type === "task.completed" ||
+        type === "task.failed"
+      ) {
         source.close();
       }
     });
