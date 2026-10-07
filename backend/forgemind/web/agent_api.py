@@ -1,6 +1,5 @@
 """把 ForgeMindApplication 暴露为 FastAPI SSE 与用户回答接口。"""
 
-from pathlib import Path
 from typing import Annotated
 from typing import Literal
 
@@ -36,16 +35,17 @@ from forgemind.web.workspaces import (
     WorkspaceUpload,
     WorkspaceUploadError,
     WorkspaceUploadTooLargeError,
+    UnknownWorkspaceError,
 )
 
 
 class CreateTaskRequest(StrictContractModel):
-    """前端创建任务时提交的用户目标和本地项目目录。"""
+    """前端创建任务时提交的用户目标和公开工作区编号。"""
 
     original_request: str = Field(min_length=1)
-    project_root: str = Field(min_length=1)
+    workspace_id: str = Field(min_length=1)
 
-    @field_validator("original_request", "project_root")
+    @field_validator("original_request", "workspace_id")
     @classmethod
     def require_visible_text(cls, value: str) -> str:
         """拒绝只有空格或换行的文本，同时保留用户输入原文。"""
@@ -60,7 +60,7 @@ class CreatedTaskResponse(StrictContractModel):
 
     task_id: str = Field(min_length=1)
     original_request: str = Field(min_length=1)
-    project_root: str = Field(min_length=1)
+    workspace_id: str = Field(min_length=1)
     status: Literal["running"]
     revision: int = Field(ge=1)
 
@@ -140,14 +140,14 @@ def create_agent_stream_app(
     def create_task(request: CreateTaskRequest) -> CreatedTaskResponse:
         """创建持久化任务，返回前端后续操作所需的 task_id。"""
 
-        project_root = Path(request.project_root)
-        if not project_root.is_absolute() or not project_root.is_dir():
-            # 项目目录属于 HTTP 输入语义，必须在产生 task_id 和写入 State
-            # 之前拒绝，避免保存一个后续所有 Tool 都无法使用的任务。
-            raise HTTPException(
-                status_code=http_status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail="project_root must be an existing absolute directory",
-            )
+        if workspace_store is None:
+            raise HTTPException(status_code=503, detail="workspace store is unavailable")
+        try:
+            # 浏览器只能提交不可解释为路径的公开 ID。真实绝对路径由服务器
+            # 在受控根目录中解析，不能由 HTTP 客户端自行指定。
+            project_root = workspace_store.resolve(request.workspace_id)
+        except UnknownWorkspaceError as error:
+            raise HTTPException(status_code=404, detail="workspace not found") from error
 
         # Application 负责生成权威 ID，并把任务和 revision=1 的
         # RUNNING 状态原子写入 SQLite；创建任务本身不会调用模型。
@@ -161,7 +161,7 @@ def create_agent_stream_app(
         return CreatedTaskResponse(
             task_id=task_view.task.task_id,
             original_request=task_view.task.original_request,
-            project_root=task_view.task.project_root,
+            workspace_id=request.workspace_id,
             status=task_view.current_status.status.value,
             revision=task_view.current_status.revision,
         )
