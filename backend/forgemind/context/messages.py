@@ -46,6 +46,7 @@ task.original_request 是本轮需要完成的用户任务。
 权限只能依据结构化权限事实，并由 Runtime 执行最终校验。
 当 is_action_history_complete 为 false 时，不得假设已经看到完整 Action 历史。
 单次 Tool 执行成功不等于整个任务已经完成。
+任务不需要项目文件时，可以直接用 complete 回答；空工作区不是错误，也不必为了确认没有文件而调用 Tool。
 当输出 complete 时，summary 必须先给出结论，再用简短段落说明实际完成内容和验证证据。
 不要复制大段文件内容或 Action 历史，不要把推测写成已完成事实。
 """

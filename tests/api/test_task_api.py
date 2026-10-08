@@ -70,6 +70,36 @@ def test_post_tasks_creates_persisted_running_task(tmp_path: Path) -> None:
     assert task_view.task.project_root == str(workspace_store.resolve(workspace.workspace_id))
 
 
+def test_post_tasks_without_workspace_creates_persistent_empty_workspace(
+    tmp_path: Path,
+) -> None:
+    application = ForgeMindApplication(
+        state=SQLiteForgeMindState.open(tmp_path / "state.db"),
+        model=ModelThatMustNotRun(),
+    )
+    workspace_store = FileSystemWorkspaceStore(tmp_path / "workspaces")
+    client = TestClient(create_agent_stream_app(application, workspace_store))
+
+    response = client.post(
+        "/tasks",
+        json={"original_request": "解释一下 Python 生成器"},
+    )
+
+    assert response.status_code == 201
+    payload = response.json()
+    assert payload["workspace_id"].startswith("workspace_")
+    workspace_root = workspace_store.resolve(payload["workspace_id"])
+    assert workspace_root.is_dir()
+    assert list(workspace_root.iterdir()) == []
+    assert application.get_task(payload["task_id"]).task.project_root == str(
+        workspace_root
+    )
+    assert client.get(f"/tasks/{payload['task_id']}/files").json() == {
+        "files": [],
+        "file_count": 0,
+    }
+
+
 def test_post_tasks_rejects_blank_user_request(tmp_path: Path) -> None:
     """只有空白符的用户请求不能进入 Application 或 SQLite。"""
 

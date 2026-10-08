@@ -72,10 +72,16 @@ export function App() {
   }, [taskMeta, taskState.status]);
 
   async function start(files: File[], request: string) {
-    const workspace = files.length === 1 && files[0].name.toLowerCase().endsWith(".zip")
-      ? await uploadWorkspaceArchive(files[0])
-      : await uploadWorkspace(files);
-    const created = await createTask(request, workspace.workspace_id);
+    let workspaceId: string | undefined;
+    if (files.length > 0) {
+      const workspace = files.length === 1 && files[0].name.toLowerCase().endsWith(".zip")
+        ? await uploadWorkspaceArchive(files[0])
+        : await uploadWorkspace(files);
+      workspaceId = workspace.workspace_id;
+    }
+    const created = workspaceId
+      ? await createTask(request, workspaceId)
+      : await createTask(request);
     window.history.replaceState({}, "", `/?task=${encodeURIComponent(created.task_id)}`);
     setTaskMeta({ id: created.task_id, request: created.original_request });
     setActions([]);

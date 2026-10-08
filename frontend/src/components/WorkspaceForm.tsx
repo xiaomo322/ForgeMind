@@ -6,7 +6,7 @@ const MAX_TOTAL_SIZE = 5 * 1024 * 1024;
 const MAX_ZIP_SIZE = 10 * 1024 * 1024;
 
 function validateFiles(files: File[]): string | null {
-  if (files.length === 0) return "请选择 Python 文件或一个项目 ZIP。";
+  if (files.length === 0) return null;
   const zipFiles = files.filter((file) => file.name.toLowerCase().endsWith(".zip"));
   if (zipFiles.length > 0) {
     if (files.length !== 1) return "ZIP 需要单独上传，不能和 Python 文件混合。";
@@ -67,12 +67,12 @@ export function WorkspaceForm({ onStart }: WorkspaceFormProps) {
         <p className="machine-label">NEW WORKSPACE</p>
         <h1>把代码交给 Agent，保留每一步证据。</h1>
         <p>
-          上传一个完整项目 ZIP，或选择 1–20 个 UTF-8 Python 文件，再描述目标。任务和工作区会持久保存。
+          直接输入问题即可开始聊天。需要分析代码时，也可以上传一个完整项目 ZIP，或选择 1–20 个 UTF-8 Python 文件。
         </p>
       </div>
 
       <div className="form-field file-field">
-        <label htmlFor="python-files">选择 Python 文件或项目 ZIP</label>
+        <label htmlFor="python-files">选择 Python 文件或项目 ZIP（可选）</label>
         <input
           id="python-files"
           type="file"
@@ -80,7 +80,7 @@ export function WorkspaceForm({ onStart }: WorkspaceFormProps) {
           multiple
           onChange={(event) => selectFiles(Array.from(event.target.files ?? []))}
         />
-        <span className="field-help">Python 文件总计 ≤ 5 MiB；单个 ZIP ≤ 10 MiB</span>
+        <span className="field-help">不上传文件也能聊天；Python 文件总计 ≤ 5 MiB，单个 ZIP ≤ 10 MiB</span>
       </div>
 
       {files.length > 0 && (
@@ -107,7 +107,7 @@ export function WorkspaceForm({ onStart }: WorkspaceFormProps) {
 
       {error && <p className="form-error" role="alert">{error}</p>}
       <button className="primary-button" type="submit" disabled={submitting}>
-        {submitting ? "正在创建工作区…" : "启动 Agent"}
+        {submitting ? "正在创建任务…" : files.length === 0 ? "开始聊天" : "启动 Agent"}
       </button>
     </form>
   );

@@ -74,12 +74,15 @@ export async function uploadWorkspaceArchive(archive: File): Promise<UploadedWor
 
 export async function createTask(
   originalRequest: string,
-  workspaceId: string,
+  workspaceId?: string,
 ): Promise<CreatedTask> {
   return jsonRequest<CreatedTask>("/tasks", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ original_request: originalRequest, workspace_id: workspaceId }),
+    body: JSON.stringify({
+      original_request: originalRequest,
+      ...(workspaceId ? { workspace_id: workspaceId } : {}),
+    }),
   });
 }
 

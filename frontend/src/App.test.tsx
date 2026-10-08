@@ -52,7 +52,7 @@ describe("ForgeMind App", () => {
   it("rejects a non-Python file before uploading", async () => {
     render(<App />);
 
-    fireEvent.change(screen.getByLabelText("选择 Python 文件或项目 ZIP"), {
+    fireEvent.change(screen.getByLabelText("选择 Python 文件或项目 ZIP（可选）"), {
       target: { files: [new File(["notes"], "notes.txt", { type: "text/plain" })] },
     });
 
@@ -78,7 +78,7 @@ describe("ForgeMind App", () => {
     render(<App />);
 
     await user.upload(
-      screen.getByLabelText("选择 Python 文件或项目 ZIP"),
+      screen.getByLabelText("选择 Python 文件或项目 ZIP（可选）"),
       new File(["value = 1\n"], "main.py", { type: "text/x-python" }),
     );
     await user.type(screen.getByLabelText("任务目标"), "检查价格计算");
@@ -89,6 +89,26 @@ describe("ForgeMind App", () => {
     expect(mockedUpload).toHaveBeenCalledTimes(1);
     expect(mockedCreate).toHaveBeenCalledWith("检查价格计算", "workspace-1");
     expect(mockedConnect).toHaveBeenCalled();
+  });
+
+  it("creates a chat task without uploading files", async () => {
+    mockedCreate.mockResolvedValue({
+      task_id: "task-chat",
+      original_request: "解释 Python 生成器",
+      workspace_id: "workspace-empty",
+      status: "running",
+      revision: 1,
+    });
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.type(screen.getByLabelText("任务目标"), "解释 Python 生成器");
+    await user.click(screen.getByRole("button", { name: "开始聊天" }));
+
+    await waitFor(() => expect(mockedCreate).toHaveBeenCalledWith("解释 Python 生成器"));
+    expect(mockedUpload).not.toHaveBeenCalled();
+    expect(mockedUploadArchive).not.toHaveBeenCalled();
+    expect(await screen.findByText("task-chat")).toBeInTheDocument();
   });
 
   it("uploads one ZIP archive as a new workspace", async () => {
@@ -109,7 +129,7 @@ describe("ForgeMind App", () => {
     render(<App />);
 
     await user.upload(
-      screen.getByLabelText("选择 Python 文件或项目 ZIP"),
+      screen.getByLabelText("选择 Python 文件或项目 ZIP（可选）"),
       new File(["zip-content"], "project.zip", { type: "application/zip" }),
     );
     await user.type(screen.getByLabelText("任务目标"), "检查整个项目");
@@ -123,7 +143,7 @@ describe("ForgeMind App", () => {
   it("rejects mixing a ZIP archive with direct Python files", async () => {
     render(<App />);
 
-    fireEvent.change(screen.getByLabelText("选择 Python 文件或项目 ZIP"), {
+    fireEvent.change(screen.getByLabelText("选择 Python 文件或项目 ZIP（可选）"), {
       target: {
         files: [
           new File(["zip"], "project.zip", { type: "application/zip" }),

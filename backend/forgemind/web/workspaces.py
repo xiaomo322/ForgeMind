@@ -113,8 +113,8 @@ class UploadedWorkspace(StrictContractModel):
     """创建完成后可安全公开的工作区信息。"""
 
     workspace_id: str = Field(min_length=1)
-    files: tuple[UploadedFileInfo, ...] = Field(min_length=1)
-    file_count: int = Field(ge=1)
+    files: tuple[UploadedFileInfo, ...]
+    file_count: int = Field(ge=0)
     total_size_bytes: int = Field(ge=0)
 
 
@@ -160,6 +160,24 @@ class FileSystemWorkspaceStore:
             files=files,
             file_count=len(files),
             total_size_bytes=sum(file.size_bytes for file in files),
+        )
+
+    def create_empty(self) -> UploadedWorkspace:
+        """创建持久化空工作区，让纯聊天任务仍有稳定项目边界。"""
+
+        workspace_id = f"workspace_{uuid4()}"
+        final_root = self._storage_root / workspace_id
+        temporary_root = Path(mkdtemp(prefix=".upload-", dir=self._storage_root))
+        try:
+            temporary_root.replace(final_root)
+        except Exception:
+            shutil.rmtree(temporary_root, ignore_errors=True)
+            raise
+        return UploadedWorkspace(
+            workspace_id=workspace_id,
+            files=(),
+            file_count=0,
+            total_size_bytes=0,
         )
 
     def create_from_zip(self, archive_content: bytes) -> UploadedWorkspace:

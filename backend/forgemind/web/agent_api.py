@@ -56,15 +56,22 @@ class CreateTaskRequest(StrictContractModel):
     """前端创建任务时提交的用户目标和公开工作区编号。"""
 
     original_request: str = Field(min_length=1)
-    workspace_id: str = Field(min_length=1)
+    workspace_id: str | None = Field(default=None, min_length=1)
 
-    @field_validator("original_request", "workspace_id")
+    @field_validator("original_request")
     @classmethod
     def require_visible_text(cls, value: str) -> str:
         """拒绝只有空格或换行的文本，同时保留用户输入原文。"""
 
         if not value.strip():
             raise ValueError("必填文本不能只包含空白字符")
+        return value
+
+    @field_validator("workspace_id")
+    @classmethod
+    def require_visible_workspace_id(cls, value: str | None) -> str | None:
+        if value is not None and not value.strip():
+            raise ValueError("workspace_id 不能只包含空白字符")
         return value
 
 
@@ -268,12 +275,18 @@ def create_agent_stream_app(
 
         if workspace_store is None:
             raise HTTPException(status_code=503, detail="workspace store is unavailable")
-        try:
-            # 浏览器只能提交不可解释为路径的公开 ID。真实绝对路径由服务器
-            # 在受控根目录中解析，不能由 HTTP 客户端自行指定。
-            project_root = workspace_store.resolve(request.workspace_id)
-        except UnknownWorkspaceError as error:
-            raise HTTPException(status_code=404, detail="workspace not found") from error
+        if request.workspace_id is None:
+            empty_workspace = workspace_store.create_empty()
+            workspace_id = empty_workspace.workspace_id
+            project_root = workspace_store.resolve(workspace_id)
+        else:
+            workspace_id = request.workspace_id
+            try:
+                # 浏览器只能提交不可解释为路径的公开 ID。真实绝对路径由服务器
+                # 在受控根目录中解析，不能由 HTTP 客户端自行指定。
+                project_root = workspace_store.resolve(workspace_id)
+            except UnknownWorkspaceError as error:
+                raise HTTPException(status_code=404, detail="workspace not found") from error
 
         # Application 负责生成权威 ID，并把任务和 revision=1 的
         # RUNNING 状态原子写入 SQLite；创建任务本身不会调用模型。
@@ -287,7 +300,7 @@ def create_agent_stream_app(
         return CreatedTaskResponse(
             task_id=task_view.task.task_id,
             original_request=task_view.task.original_request,
-            workspace_id=request.workspace_id,
+            workspace_id=workspace_id,
             status=task_view.current_status.status.value,
             revision=task_view.current_status.revision,
         )

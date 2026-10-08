@@ -141,6 +141,21 @@ def test_workspace_can_be_resolved_after_store_restart(tmp_path: Path) -> None:
     assert restarted_store.resolve(workspace.workspace_id).is_dir()
 
 
+def test_empty_workspace_can_be_resolved_after_store_restart(tmp_path: Path) -> None:
+    storage_root = tmp_path / "workspaces"
+    workspace = FileSystemWorkspaceStore(storage_root).create_empty()
+
+    restored_root = FileSystemWorkspaceStore(storage_root).resolve(
+        workspace.workspace_id
+    )
+
+    assert workspace.files == ()
+    assert workspace.file_count == 0
+    assert workspace.total_size_bytes == 0
+    assert restored_root.is_dir()
+    assert list(restored_root.iterdir()) == []
+
+
 def test_stage_file_keeps_bytes_outside_active_workspace(
     tmp_path: Path,
 ) -> None:
