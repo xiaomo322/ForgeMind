@@ -99,14 +99,13 @@ def record_edit_file_no_change_rejection(
     return rejected
 
 
-def record_edit_file_read_failure(
+def build_edit_file_read_failure(
     action: AcceptedEditFileToolAction,
     failure: ReadFileToolError,
     *,
     resolved_path: Path,
-    observations: ObservationRegistryWriter,
 ) -> FailedObservation:
-    """把 edit_file 读取目标快照时的失败登记为 failed。"""
+    """把 edit_file 读取目标快照时的异常转换为稳定失败事实。"""
 
     if failure.path != resolved_path:
         raise EditFileToolFailureTargetMismatchError(
@@ -150,11 +149,28 @@ def record_edit_file_read_failure(
         status="failed",
         error=ObservationError(code=code, message=message, details=details),
     )
+    return failed
+
+
+def record_edit_file_read_failure(
+    action: AcceptedEditFileToolAction,
+    failure: ReadFileToolError,
+    *,
+    resolved_path: Path,
+    observations: ObservationRegistryWriter,
+) -> FailedObservation:
+    """把 edit_file 读取目标快照时的失败登记为 failed。"""
+
+    failed = build_edit_file_read_failure(
+        action,
+        failure,
+        resolved_path=resolved_path,
+    )
     observations.record(failed)
     return failed
 
 
-def record_edit_file_preparation_failure(
+def build_edit_file_preparation_failure(
     action: AcceptedEditFileToolAction,
     failure: (
         EditFileVersionMismatchError
@@ -162,10 +178,8 @@ def record_edit_file_preparation_failure(
         | EditTargetNotFoundError
         | EditTargetAmbiguousError
     ),
-    *,
-    observations: ObservationRegistryWriter,
 ) -> FailedObservation:
-    """把快照校验或精确匹配失败登记为 failed。"""
+    """把快照校验或精确匹配异常转换为稳定失败事实。"""
 
     details = _requested_path_details(action)
     if isinstance(failure, EditFileVersionMismatchError):
@@ -208,6 +222,23 @@ def record_edit_file_preparation_failure(
         status="failed",
         error=ObservationError(code=code, message=message, details=details),
     )
+    return failed
+
+
+def record_edit_file_preparation_failure(
+    action: AcceptedEditFileToolAction,
+    failure: (
+        EditFileVersionMismatchError
+        | UnicodeDecodeError
+        | EditTargetNotFoundError
+        | EditTargetAmbiguousError
+    ),
+    *,
+    observations: ObservationRegistryWriter,
+) -> FailedObservation:
+    """把快照校验或精确匹配失败登记为 failed。"""
+
+    failed = build_edit_file_preparation_failure(action, failure)
     observations.record(failed)
     return failed
 

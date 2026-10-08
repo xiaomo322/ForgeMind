@@ -4,6 +4,10 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
+from forgemind.runtime.edit_file_execution import (
+    build_edit_file_preparation_failure,
+    build_edit_file_read_failure,
+)
 from forgemind.runtime.ids import (
     new_permission_decision_id,
     new_task_status_id,
@@ -25,13 +29,16 @@ from forgemind.schema.permissions import PermissionDecision, PermissionDecisionR
 from forgemind.schema.tasks import TaskStatus, TaskStatusRecord
 from forgemind.state.sqlite_state import SQLiteForgeMindState
 from forgemind.tools.edit_file import (
+    EditFileVersionMismatchError,
     EditFileVersionChangedError,
     EditFileWriteError,
+    EditTargetAmbiguousError,
+    EditTargetNotFoundError,
     PreparedEdit,
     prepare_edit_from_snapshot,
     replace_file_atomically,
 )
-from forgemind.tools.read_file import read_file_bytes
+from forgemind.tools.read_file import ReadFileToolError, read_file_bytes
 
 
 IdFactory = Callable[[], str]
@@ -50,7 +57,7 @@ class PermissionApprovalExecutionResult:
     """一次批准修改完成后产生的全部权威事实。"""
 
     decision: PermissionDecisionRecord
-    plan: EditExecutionPlan
+    plan: EditExecutionPlan | None
     observation: TerminalObservation
     running_status: TaskStatusRecord
 
@@ -177,6 +184,36 @@ def resume_edit_execution(
     return observation
 
 
+def _record_preflight_failure(
+    *,
+    decision: PermissionDecisionRecord,
+    observation: FailedObservation,
+    current: TaskStatusRecord,
+    state: SQLiteForgeMindState,
+    next_running_status_id: IdFactory,
+) -> PermissionApprovalExecutionResult:
+    """批准已发生但尚未写盘时，把失败与恢复状态原子落库。"""
+
+    running_status = TaskStatusRecord(
+        task_status_id=next_running_status_id(),
+        task_id=decision.task_id,
+        revision=current.revision + 1,
+        status=TaskStatus.RUNNING,
+        reason=f"edit_file 执行前检查失败：{observation.error.code.value}",
+    )
+    state.record_permission_approval_failure_running(
+        decision,
+        observation,
+        running_status,
+    )
+    return PermissionApprovalExecutionResult(
+        decision=decision,
+        plan=None,
+        observation=observation,
+        running_status=running_status,
+    )
+
+
 def approve_edit_file_permission(
     *,
     task_id: str,
@@ -199,18 +236,6 @@ def approve_edit_file_permission(
     ):
         raise InvalidEditExecutionStateError(permission_request_id)
 
-    project_root = Path(state.tasks.get(task_id).project_root)
-    resolved_path = resolve_project_path(project_root, action.arguments.path)
-    content = read_file_bytes(resolved_path)
-    prepared: PreparedEdit = prepare_edit_from_snapshot(action, content=content)
-    plan = EditExecutionPlan(
-        action_id=action.action_id,
-        task_id=task_id,
-        path=action.arguments.path,
-        before_version=prepared.before_version,
-        after_version=prepared.after_version,
-        diff=prepared.diff,
-    )
     decision = PermissionDecisionRecord(
         permission_decision_id=next_permission_decision_id(),
         permission_request_id=permission_request_id,
@@ -219,6 +244,50 @@ def approve_edit_file_permission(
         decision=PermissionDecision.APPROVE,
         source="user",
         raw_response=raw_response,
+    )
+    project_root = Path(state.tasks.get(task_id).project_root)
+    resolved_path = resolve_project_path(project_root, action.arguments.path)
+    try:
+        content = read_file_bytes(resolved_path)
+    except ReadFileToolError as failure:
+        observation = build_edit_file_read_failure(
+            action,
+            failure,
+            resolved_path=resolved_path,
+        )
+        return _record_preflight_failure(
+            decision=decision,
+            observation=observation,
+            current=current,
+            state=state,
+            next_running_status_id=next_running_status_id,
+        )
+    try:
+        prepared: PreparedEdit = prepare_edit_from_snapshot(
+            action,
+            content=content,
+        )
+    except (
+        EditFileVersionMismatchError,
+        UnicodeDecodeError,
+        EditTargetNotFoundError,
+        EditTargetAmbiguousError,
+    ) as failure:
+        observation = build_edit_file_preparation_failure(action, failure)
+        return _record_preflight_failure(
+            decision=decision,
+            observation=observation,
+            current=current,
+            state=state,
+            next_running_status_id=next_running_status_id,
+        )
+    plan = EditExecutionPlan(
+        action_id=action.action_id,
+        task_id=task_id,
+        path=action.arguments.path,
+        before_version=prepared.before_version,
+        after_version=prepared.after_version,
+        diff=prepared.diff,
     )
     executing_status = TaskStatusRecord(
         task_status_id=next_executing_status_id(),

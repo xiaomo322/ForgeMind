@@ -100,3 +100,28 @@ def test_post_permission_rejects_stale_or_unknown_request(tmp_path: Path) -> Non
     )
 
     assert response.status_code in {404, 409}
+
+
+def test_approved_edit_of_missing_file_records_failure_and_resumes_agent(
+    tmp_path: Path,
+) -> None:
+    """批准时目标已不存在，也必须返回权威失败事实，不能泄漏为 HTTP 500。"""
+
+    client, application, source_file, task_id, permission_id = prepare_edit_wait(
+        tmp_path
+    )
+    source_file.unlink()
+
+    response = client.post(
+        f"/tasks/{task_id}/permissions/{permission_id}",
+        json={"decision": "approve", "raw_response": "批准并执行"},
+    )
+
+    assert response.status_code == 200
+    result = response.json()
+    action_state = result["actions"][-1]
+    assert result["status"] == "running"
+    assert action_state["permission_decision"]["decision"] == "approve"
+    assert action_state["observation"]["status"] == "failed"
+    assert action_state["observation"]["error"]["code"] == "FILE_NOT_FOUND"
+    assert application.get_task(task_id).current_status.status.value == "running"
