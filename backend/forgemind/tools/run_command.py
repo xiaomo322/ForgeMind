@@ -7,6 +7,10 @@ from time import monotonic_ns
 
 from forgemind.runtime.command_policy import ResolvedCommandContext
 from forgemind.schema.run_command import RunCommandResult
+from forgemind.tools.process_environment import (
+    build_safe_process_environment,
+    redact_process_temporary_path,
+)
 
 
 MAX_COMMAND_OUTPUT_BYTES = 64 * 1024
@@ -87,6 +91,7 @@ def run_command_process(
                 completed_process = subprocess.run(
                     context.command,
                     cwd=context.working_directory,
+                    env=build_safe_process_environment(temporary_root),
                     stdout=stdout_stream,
                     stderr=stderr_stream,
                     timeout=timeout_seconds,
@@ -99,6 +104,8 @@ def run_command_process(
             duration_ms = (monotonic_ns() - started_at) // 1_000_000
             stdout, stdout_truncated = _read_bounded_text(stdout_path)
             stderr, stderr_truncated = _read_bounded_text(stderr_path)
+            stdout = redact_process_temporary_path(stdout, temporary_root)
+            stderr = redact_process_temporary_path(stderr, temporary_root)
 
             raise CommandProcessTimeoutError(
                 timeout_seconds=timeout_seconds,
@@ -113,6 +120,8 @@ def run_command_process(
         duration_ms = (monotonic_ns() - started_at) // 1_000_000
         stdout, stdout_truncated = _read_bounded_text(stdout_path)
         stderr, stderr_truncated = _read_bounded_text(stderr_path)
+        stdout = redact_process_temporary_path(stdout, temporary_root)
+        stderr = redact_process_temporary_path(stderr, temporary_root)
         return RunCommandResult(
             program=context.program,
             executable=str(context.executable),

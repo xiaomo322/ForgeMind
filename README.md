@@ -27,8 +27,8 @@ ForgeMind 是面向 Python / AI 应用开发者的项目级研发 Agent。V0.1 �
 | 10 | Agent 执行循环 | 核心已确定 |
 | 11 | 安全设计 | 核心已确定 |
 | 12 | Evaluation 评测方案 | 后续 |
-| 13 | 测试方案 | 后续 |
-| 14 | 部署方案 | 后续 |
+| 13 | 测试方案 | MVP 自动化验证已落地 |
+| 14 | 部署方案 | 可信用户服务器部署已落地 |
 | 15 | 开发规范 | 初步确定 |
 | 16 | 项目开发日志 | 已建立 |
 
@@ -164,6 +164,58 @@ Tool、用户询问、逐 Action 权限、SQLite 重启恢复、显式完成状�
 
 ## 当前学习进度
 
-当前 ForgeMind V0.1 端到端 MVP 已完成（更新于 2026-10-06）。应用服务可以创建任务、连续调用真实模型、执行立即型 Tool、暂停等待问题或权限、恢复用户决定，并在证据完整时进入 `COMPLETED`。`edit_file` 使用持久化执行计划和 `EXECUTING` 状态跨进程对账；`run_tests` 与 `run_command` 保存真实进程结果。端到端测试覆盖 search → read → edit → approve → pytest → approve → complete，并在权限阶段重启 SQLite State。详细设计演进见 `docs/06-数据结构设计.md`，逐步开发记录见 `docs/16-项目开发日志.md`。
+当前 ForgeMind V0.1 端到端 MVP 与可信用户 Web 工作台已完成（更新于 2026-10-08）。应用服务可以创建任务、连续调用真实模型、执行立即型 Tool、暂停等待问题或权限、恢复用户决定，并在证据完整时进入 `COMPLETED`。浏览器可以上传受限的 Python 文件、创建任务、通过 SSE 查看执行过程、回答问题、批准或拒绝受保护操作，并在刷新后恢复权威任务状态。`edit_file` 使用持久化执行计划和 `EXECUTING` 状态跨进程对账；`run_tests` 与 `run_command` 保存真实进程结果。详细设计演进见 `docs/06-数据结构设计.md`，逐步开发记录见 `docs/16-项目开发日志.md`。
 
-每个切片只处理一个主要概念，并明确留出核心代码由用户先写；AI 提供脚手架、测试和基于真实错误的 Debug 支持。
+学习时先讲清原理和数据流，再看具体文件中的核心代码、函数参数与调用顺序，最后通过能看到真实输出的完整测试验证。AI 可以协助完成代码，但需要逐步解释实现，让学习者理解关键部分。
+
+### FastAPI SSE 与 React 工作台
+
+- `POST /workspaces` 接收 1–20 个扁平 UTF-8 `.py` 文件；单文件不超过 1 MiB，总大小不超过 5 MiB。服务端校验完成后才原子建立隔离工作区。
+- `POST /tasks` 接收用户原始目标和公开 `workspace_id`，由服务端解析真实目录，浏览器不能提交或读取绝对 `project_root`。
+- `GET /tasks/{task_id}` 返回公开任务状态与 Action 历史，React 页面通过 URL 中的任务 ID 在刷新后恢复。
+- `GET /tasks/{task_id}/events` 每完成一轮就发送 Agent 事件；Agent 提问时先发送 `agent.step`，再发送包含 `question_action_id` 的 `task.waiting_user`，随后结束本次连接。
+- `POST /tasks/{task_id}/answers` 使用严格 Pydantic 请求模型接收原问题 ID、用户原话和可选项；Application/Runtime 校验后，将回答记录和 `RUNNING` 状态一并写入 SQLite。
+- `POST /tasks/{task_id}/permissions/{permission_request_id}` 把批准或拒绝绑定到具体权限请求；修改文件或运行代码前仍由 Runtime 最终拦截。
+- 客户端收到 `status=running` 后重新 `GET /events`，新一轮 Agent 会从持久化 State 构造上下文，看到用户原话和选项，再继续执行。
+- React + TypeScript 前端负责文件选择、任务时间线、提问与权限表单；API Key 只存在于服务器环境变量中。
+- 端到端测试真实覆盖上传 → 创建 → SSE 检索/读取 → 修改授权 → pytest 授权 → 完成，并检查公开协议不泄露工作区或 Tool 临时目录。全项目回归 672 项通过，前端 12 项测试、TypeScript 检查与生产构建通过。
+- 每个任务同一时刻只允许一条 SSE 执行流；每批最多 20 步，达到上限后页面暂停并等待用户点击继续。模型输出解析失败或连接异常也会停止自动重连并提供显式重试。
+- 当前重新连接后的 SSE 协议序号从 1 开始，页面使用连续时间线序号避免显示重复；跨进程事件回放与 `Last-Event-ID` 尚未实现。
+- Tool 子进程只继承运行所需的系统环境变量，不继承服务器中的模型 API Key；临时目录和项目绝对路径在公开结果中统一隐藏。
+- 已用本地 Uvicorn 和真实 HTTP 客户端观察最小 SSE：三条事件约在 0.05、0.55、1.05 秒到达，证明本地连接按 `yield` 的节奏逐条接收；这是固定消息演示，不调用模型。
+- 当前部署边界是单个可信用户或受控内网。公开多租户服务仍需要任务级容器沙箱、资源限额、网络隔离、身份认证和审计。
+
+## 运行 Web 工作台
+
+先按前文配置 `DEEPSEEK_API_KEY`，构建前端：
+
+```powershell
+cd frontend
+pnpm install
+pnpm build
+cd ..
+```
+
+启动同源 FastAPI + React 服务：
+
+```powershell
+.venv\Scripts\python.exe -X utf8 -m uvicorn forgemind.web.app:create_app_from_environment --factory --host 127.0.0.1 --port 8000
+```
+
+浏览器打开 `http://127.0.0.1:8000`。生产服务器的 Docker Compose、持久卷、健康检查和反向代理边界见 [`docs/17-服务器部署.md`](docs/17-服务器部署.md)。
+
+Windows 下运行本节测试时，使用 UTF-8 输出，避免中文变成乱码：
+
+```powershell
+.venv\Scripts\python.exe -X utf8 -m pytest -s -p no:cacheprovider --basetemp=.test-tmp\pytest-sse-readable tests/api/test_agent_step_events.py
+```
+
+观察真实 HTTP 分段到达时，在两个终端分别运行：
+
+```powershell
+.venv\Scripts\python.exe -X utf8 -m uvicorn forgemind.web.learning_sse:app --host 127.0.0.1 --port 8765
+```
+
+```powershell
+.venv\Scripts\python.exe -X utf8 examples\observe_sse_stream.py
+```

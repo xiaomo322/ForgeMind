@@ -1,0 +1,26 @@
+services:
+  forgemind:
+    build:
+      context: .
+    ports:
+      # 默认只监听服务器本机；需要公网访问时应由带身份认证的反向代理转发。
+      - "127.0.0.1:8000:8000"
+    environment:
+      DEEPSEEK_API_KEY: "${DEEPSEEK_API_KEY:?请先在 .env 中配置 DEEPSEEK_API_KEY}"
+    volumes:
+      - forgemind-data:/data
+    # 只允许持久卷和受限临时目录写入，减少上传代码影响服务器镜像的范围。
+    read_only: true
+    tmpfs:
+      - /tmp:size=256m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 256
+    restart: unless-stopped
+
+volumes:
+  forgemind-data:
+    # 固定卷名，备份命令不受项目目录名或 --project-name 影响。
+    name: forgemind-data

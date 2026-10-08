@@ -55,6 +55,11 @@ export interface PermissionRequiredData {
   arguments: Record<string, unknown>;
 }
 
+export interface StepLimitReachedData {
+  max_steps: number;
+  message: string;
+}
+
 export type TaskEvent =
   | { type: "agent.step"; sequence: number; data: AgentStepData }
   | { type: "task.waiting_user"; sequence: number; data: WaitingUserData }
@@ -64,6 +69,11 @@ export type TaskEvent =
       data: PermissionRequiredData;
     }
   | { type: "task.completed"; sequence: number; data: { summary: string } }
+  | {
+      type: "task.step_limit_reached";
+      sequence: number;
+      data: StepLimitReachedData;
+    }
   | {
       type: "task.failed";
       sequence: number;

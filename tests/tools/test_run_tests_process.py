@@ -74,6 +74,47 @@ def test_run_pytest_uses_controlled_command_and_returns_report(
     assert result.is_output_truncated is False
 
 
+def test_run_pytest_redacts_its_private_temporary_path_from_output(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """pytest 会打印 JUnit 路径，但该服务端实现细节不能进入 Observation。"""
+
+    arguments = RunTestsArguments(
+        targets=("tests/test_price.py::test_discount",),
+        timeout_seconds=30,
+    )
+    target = resolved_target(tmp_path)
+    observed_temporary_root: Path | None = None
+
+    def fake_run(command: tuple[str, ...], **kwargs: object) -> subprocess.CompletedProcess[bytes]:
+        nonlocal observed_temporary_root
+        report_path = report_argument(command)
+        observed_temporary_root = report_path.parent
+        stdout = kwargs["stdout"]
+        stderr = kwargs["stderr"]
+        assert hasattr(stdout, "write")
+        assert hasattr(stderr, "write")
+        stdout.write(f"report: {report_path}\n".encode())  # type: ignore[union-attr]
+        stderr.write(f"temp: {report_path.parent}\n".encode())  # type: ignore[union-attr]
+        stdout.flush()  # type: ignore[union-attr]
+        stderr.flush()  # type: ignore[union-attr]
+        report_path.write_bytes(
+            b'<testsuite tests="1" failures="0" errors="0" skipped="0" />'
+        )
+        return subprocess.CompletedProcess(command, 0)
+
+    monkeypatch.setattr(run_tests_tool.subprocess, "run", fake_run)
+
+    result = run_pytest(tmp_path, arguments, (target,))
+
+    assert observed_temporary_root is not None
+    assert str(observed_temporary_root) not in result.stdout
+    assert str(observed_temporary_root) not in result.stderr
+    assert "<forgemind-temp>" in result.stdout
+    assert "<forgemind-temp>" in result.stderr
+
+
 def test_run_pytest_rejects_resolved_target_mismatch(tmp_path: Path) -> None:
     arguments = RunTestsArguments(targets=("tests/test_other.py",))
 
@@ -212,6 +253,36 @@ def test_run_pytest_executes_real_pytest_and_parses_its_report(
     assert result.test_outcome is expected_outcome
     assert result.exit_code == expected_exit_code
     assert result.targets == arguments.targets
+
+
+def test_run_pytest_real_process_does_not_inherit_server_secrets(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "server-model-secret")
+    monkeypatch.setenv("FORGEMIND_TEST_SECRET", "another-server-secret")
+    test_file = tmp_path / "test_environment.py"
+    test_file.write_text(
+        """
+import os
+
+
+def test_server_secrets_are_absent():
+    assert "DEEPSEEK_API_KEY" not in os.environ
+    assert "FORGEMIND_TEST_SECRET" not in os.environ
+""".strip(),
+        encoding="utf-8",
+    )
+    arguments = RunTestsArguments(
+        targets=("test_environment.py",),
+        timeout_seconds=30,
+    )
+    targets = resolve_run_tests_targets(tmp_path, arguments.targets)
+
+    result = run_pytest(tmp_path, arguments, targets)
+
+    assert result.test_outcome is Outcome.PASSED
+    assert result.passed == 1
 
 
 def test_run_pytest_rejects_junit_report_over_limit(

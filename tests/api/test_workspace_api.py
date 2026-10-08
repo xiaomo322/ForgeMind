@@ -9,6 +9,7 @@ from forgemind.application import ForgeMindApplication
 from forgemind.schema.context import AgentTurnInput
 from forgemind.state.sqlite_state import SQLiteForgeMindState
 from forgemind.web.agent_api import create_agent_stream_app
+from forgemind.web.request_limits import MAX_WORKSPACE_UPLOAD_REQUEST_BYTES
 from forgemind.web.workspaces import FileSystemWorkspaceStore
 
 
@@ -93,3 +94,34 @@ def test_post_workspaces_rejects_duplicate_names_with_conflict(tmp_path: Path) -
     )
 
     assert response.status_code == 409
+
+
+def test_post_workspaces_rejects_request_body_before_multipart_parsing(
+    tmp_path: Path,
+) -> None:
+    client, _ = make_client(tmp_path)
+
+    response = client.post(
+        "/workspaces",
+        content=b"x" * (MAX_WORKSPACE_UPLOAD_REQUEST_BYTES + 1),
+        headers={"content-type": "application/octet-stream"},
+    )
+
+    assert response.status_code == 413
+    assert response.json() == {"detail": "workspace upload request is too large"}
+
+
+def test_post_workspaces_rejects_too_many_parts_before_reading_files(
+    tmp_path: Path,
+) -> None:
+    client, _ = make_client(tmp_path)
+
+    response = client.post(
+        "/workspaces",
+        files=[
+            ("files", (f"file_{index}.py", b"pass\n", "text/x-python"))
+            for index in range(21)
+        ],
+    )
+
+    assert response.status_code == 413

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { initialTaskUiState, taskStateReducer } from "./taskState";
-import type { TaskEvent } from "./types";
+import { hydrateTaskUiState, initialTaskUiState, taskStateReducer } from "./taskState";
+import type { PublicTaskState, TaskEvent } from "./types";
 
 
 function reduce(event: TaskEvent) {
@@ -77,6 +77,68 @@ describe("taskStateReducer", () => {
     });
 
     expect(state.error).toBe("任务执行失败");
+    expect(state.status).toBe("failed");
     expect(state.timeline.at(-1)?.kind).toBe("failure");
+  });
+
+  it("pauses after one execution batch until the user continues", () => {
+    const state = reduce({
+      type: "task.step_limit_reached",
+      sequence: 21,
+      data: {
+        max_steps: 20,
+        message: "本轮已执行 20 步，任务仍未结束。请检查结果后再继续。",
+      },
+    });
+
+    expect(state.status).toBe("paused");
+    expect(state.timeline.at(-1)?.kind).toBe("pause");
+  });
+
+  it("keeps answered questions and decided permissions in the restored audit trail", () => {
+    const task: PublicTaskState = {
+      task_id: "task-audit",
+      original_request: "修改并测试项目",
+      status: "running",
+      revision: 8,
+      actions: [
+        {
+          sequence: 1,
+          action: {
+            action_id: "question-1",
+            action_type: "ask_user",
+            reason: "缺少目标值",
+            question: "value 应改成多少？",
+            options: ["2", "3"],
+          },
+          user_response: { raw_response: "2", selected_option: "2" },
+          permission_request: null,
+          permission_decision: null,
+          observation: null,
+        },
+        {
+          sequence: 2,
+          action: { action_id: "edit-1", action_type: "tool_call", tool_name: "edit_file" },
+          user_response: null,
+          permission_request: {
+            permission_request_id: "permission-1",
+            tool_name: "edit_file",
+            reason: "修改文件需要确认",
+            arguments: { path: "main.py" },
+          },
+          permission_decision: { decision: "approve", raw_response: "批准" },
+          observation: { status: "success" },
+        },
+      ],
+    };
+
+    const state = hydrateTaskUiState(task);
+    const question = state.timeline.find((item) => item.kind === "question");
+    const permission = state.timeline.find((item) => item.kind === "permission");
+
+    expect(question).toMatchObject({ response: { raw_response: "2" } });
+    expect(permission).toMatchObject({ decision: { decision: "approve" } });
+    expect(state.pendingQuestion).toBeNull();
+    expect(state.pendingPermission).toBeNull();
   });
 });

@@ -150,3 +150,27 @@ def test_run_command_executes_real_process_and_keeps_nonzero_exit_code(
     assert result.program == "python"
     assert result.executable == str(context.executable)
     assert result.working_directory == str(tmp_path)
+
+
+def test_run_command_real_process_does_not_inherit_server_secrets(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "server-model-secret")
+    monkeypatch.setenv("FORGEMIND_TEST_SECRET", "another-server-secret")
+    context = _context(
+        tmp_path,
+        args=(
+            "-c",
+            (
+                "import os; "
+                "print(os.getenv('DEEPSEEK_API_KEY', 'missing')); "
+                "print(os.getenv('FORGEMIND_TEST_SECRET', 'missing'))"
+            ),
+        ),
+    )
+
+    result = run_command_process(context, timeout_seconds=30)
+
+    assert result.exit_code == 0
+    assert result.stdout.splitlines() == ["missing", "missing"]

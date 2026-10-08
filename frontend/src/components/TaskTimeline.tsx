@@ -26,15 +26,16 @@ export function TaskTimeline({ timeline }: { timeline: TimelineItem[] }) {
         </div>
       ) : (
         <ol className="timeline-list">
-          {timeline.map((item) => {
+          {timeline.map((item, index) => {
+            const key = `${item.kind}-${item.sequence}-${index}`;
             if (item.kind === "step") {
               const decision = item.data.decision;
               const toolName = value(decision, "tool_name");
               const actionType = value(decision, "action_type");
               const reason = value(decision, "reason");
               return (
-                <li className="timeline-item" key={`${item.kind}-${item.sequence}`}>
-                  <div className="timeline-index">{item.data.step_number.toString().padStart(2, "0")}</div>
+                <li className="timeline-item" key={key}>
+                  <div className="timeline-index">{(index + 1).toString().padStart(2, "0")}</div>
                   <article>
                     <div className="timeline-meta">
                       <span>{toolName || actionType || "agent"}</span>
@@ -49,11 +50,42 @@ export function TaskTimeline({ timeline }: { timeline: TimelineItem[] }) {
                 </li>
               );
             }
+            if (item.kind === "question") {
+              const answer = item.response ? value(item.response, "raw_response") : "";
+              return (
+                <li className="timeline-item timeline-interaction" key={key}>
+                  <div className="timeline-index">{(index + 1).toString().padStart(2, "0")}</div>
+                  <article>
+                    <div className="timeline-meta"><span>用户问题</span><span>{item.response ? "已回答" : "等待回答"}</span></div>
+                    <h3>{item.data.question}</h3>
+                    {answer && <p>你的回答：{answer}</p>}
+                    <details><summary>查看问答事实</summary><pre>{pretty({ question: item.data, response: item.response })}</pre></details>
+                  </article>
+                </li>
+              );
+            }
+            if (item.kind === "permission") {
+              const decision = item.decision ? value(item.decision, "decision") : "";
+              const decisionLabel = decision === "approve" ? "已批准" : decision === "reject" ? "已拒绝" : "等待决定";
+              return (
+                <li className="timeline-item timeline-interaction" key={key}>
+                  <div className="timeline-index">{(index + 1).toString().padStart(2, "0")}</div>
+                  <article>
+                    <div className="timeline-meta"><span>{item.data.tool_name} 权限</span><span>{decisionLabel}</span></div>
+                    <h3>{item.data.reason}</h3>
+                    <details><summary>查看权限事实</summary><pre>{pretty({ request: item.data, decision: item.decision })}</pre></details>
+                  </article>
+                </li>
+              );
+            }
             if (item.kind === "completion") {
-              return <li className="terminal-note terminal-note--success" key={`done-${item.sequence}`}>{item.summary}</li>;
+              return <li className="terminal-note terminal-note--success" key={key}>{item.summary}</li>;
+            }
+            if (item.kind === "pause") {
+              return <li className="terminal-note terminal-note--pause" key={key}>{item.message}</li>;
             }
             if (item.kind === "failure") {
-              return <li className="terminal-note terminal-note--danger" key={`failed-${item.sequence}`}>{item.message}</li>;
+              return <li className="terminal-note terminal-note--danger" key={key}>{item.message}</li>;
             }
             return null;
           })}

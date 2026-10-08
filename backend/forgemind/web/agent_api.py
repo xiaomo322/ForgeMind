@@ -2,6 +2,8 @@
 
 from typing import Annotated
 from typing import Literal
+from _thread import LockType
+from threading import Lock
 
 from fastapi import FastAPI, File, HTTPException, Query, UploadFile
 from fastapi import status as http_status
@@ -25,9 +27,11 @@ from forgemind.state.user_response_registry import (
 from forgemind.web.agent_events import generate_agent_step_events
 from forgemind.web.events import encode_sse_event
 from forgemind.web.public_models import PublicTaskState, build_public_task_state
+from forgemind.web.request_limits import WorkspaceUploadBodyLimitMiddleware
 from forgemind.web.workspaces import (
     DuplicateWorkspaceFilenameError,
     FileSystemWorkspaceStore,
+    MAX_WORKSPACE_FILE_COUNT,
     MAX_WORKSPACE_FILE_SIZE_BYTES,
     TooManyWorkspaceFilesError,
     UnsupportedWorkspaceFileTypeError,
@@ -108,6 +112,25 @@ def create_agent_stream_app(
     """使用调用方提供的 Application 创建可测试的 Web 应用。"""
 
     app = FastAPI()
+    app.add_middleware(WorkspaceUploadBodyLimitMiddleware)
+    task_lease_guard = Lock()
+    task_execution_leases: dict[str, LockType] = {}
+
+    def acquire_task_execution_lease(task_id: str) -> LockType | None:
+        """同一进程内只允许一条 SSE 连接驱动一个任务。"""
+
+        with task_lease_guard:
+            lease = task_execution_leases.setdefault(task_id, Lock())
+        if not lease.acquire(blocking=False):
+            return None
+        return lease
+
+    def release_task_execution_lease(task_id: str, lease: LockType) -> None:
+        lease.release()
+        with task_lease_guard:
+            # 若新请求已经取得同一把锁，则保留映射，不能替换正在使用的租约。
+            if not lease.locked() and task_execution_leases.get(task_id) is lease:
+                task_execution_leases.pop(task_id, None)
 
     @app.post(
         "/workspaces",
@@ -121,6 +144,11 @@ def create_agent_stream_app(
 
         if workspace_store is None:
             raise HTTPException(status_code=503, detail="workspace uploads are unavailable")
+        if len(files) > MAX_WORKSPACE_FILE_COUNT:
+            raise HTTPException(
+                status_code=413,
+                detail=f"at most {MAX_WORKSPACE_FILE_COUNT} files are allowed",
+            )
 
         uploads: list[WorkspaceUpload] = []
         try:
@@ -188,19 +216,32 @@ def create_agent_stream_app(
     ) -> StreamingResponse:
         """逐轮运行指定任务，并返回 SSE 事件流。"""
 
-        # 生成器表达式保持惰性：StreamingResponse 请求下一块数据时，
-        # generate_agent_step_events 才驱动下一轮 Agent。
-        encoded_events = (
-            encode_sse_event(event)
-            for event in generate_agent_step_events(
-                application,
-                task_id,
-                max_steps=max_steps,
+        lease = acquire_task_execution_lease(task_id)
+        if lease is None:
+            raise HTTPException(
+                status_code=409,
+                detail="task is already being driven by another event stream",
             )
-        )
+
+        # 生成器保持惰性；finally 保证客户端断开或正常结束都会释放任务租约。
+        def encoded_events():
+            try:
+                for event in generate_agent_step_events(
+                    application,
+                    task_id,
+                    max_steps=max_steps,
+                ):
+                    yield encode_sse_event(event)
+            finally:
+                release_task_execution_lease(task_id, lease)
+
         return StreamingResponse(
-            encoded_events,
+            encoded_events(),
             media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "X-Accel-Buffering": "no",
+            },
         )
 
     @app.get("/tasks/{task_id}", response_model=PublicTaskState)

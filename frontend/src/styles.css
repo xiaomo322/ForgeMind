@@ -46,8 +46,9 @@ h1, h2, h3 { font-family: var(--font-display); font-style: normal; line-height: 
 .status-line { display: flex; align-items: center; gap: var(--space-xs); font-family: var(--font-mono); font-size: var(--text-xs); font-weight: 600; letter-spacing: 0.04em; }
 .status-dot { width: 0.55rem; height: 0.55rem; border-radius: 50%; background: var(--color-warning); }
 .status-dot--completed { background: var(--color-success); }
-.status-dot--blocked, .status-dot--cancelled { background: var(--color-danger); }
+.status-dot--blocked, .status-dot--cancelled, .status-dot--failed { background: var(--color-danger); }
 .status-dot--running { background: var(--color-accent); }
+.status-dot--paused { background: var(--color-warning); }
 .workbench-grid { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(18rem, 0.75fr); gap: var(--space-xl); padding-top: var(--space-xl); }
 
 .timeline-panel { min-width: 0; min-height: 32rem; padding: var(--space-lg); border-radius: var(--radius-md); background: var(--color-graphite); color: var(--color-on-dark); }
@@ -67,10 +68,13 @@ pre { max-width: 100%; margin: var(--space-sm) 0 0; padding: var(--space-md); ov
 .timeline-panel pre { border-color: var(--color-graphite-soft); background: var(--color-graphite-soft); color: var(--color-on-dark); }
 .terminal-note { padding: var(--space-md); border-left: 3px solid var(--color-accent); background: var(--color-graphite-soft); }
 .terminal-note--success { border-color: var(--color-success); }
+.terminal-note--pause { border-color: var(--color-warning); }
 .terminal-note--danger { border-color: var(--color-danger); }
+.timeline-interaction article { border-left: 2px solid var(--color-accent); padding-left: var(--space-md); }
+.timeline-interaction p { margin-bottom: var(--space-sm); color: var(--color-on-dark); }
 
 .interaction-column { display: grid; align-content: start; gap: var(--space-md); }
-.interaction-panel, .context-panel, .completion-panel { padding: var(--space-lg); border: var(--rule-thin) solid var(--color-rule); border-radius: var(--radius-md); background: var(--color-surface); }
+.interaction-panel, .context-panel, .completion-panel, .runtime-action-panel { padding: var(--space-lg); border: var(--rule-thin) solid var(--color-rule); border-radius: var(--radius-md); background: var(--color-surface); }
 .interaction-panel--permission { border-top: 3px solid var(--color-warning); }
 .interaction-panel h2, .completion-panel h2 { margin-bottom: var(--space-sm); font-size: var(--text-xl); }
 .interaction-panel > p:not(.machine-label), .context-panel > p:not(.machine-label) { color: var(--color-ink-soft); }
@@ -80,6 +84,9 @@ pre { max-width: 100%; margin: var(--space-sm) 0 0; padding: var(--space-md); ov
 .option-list label:has(input:checked) { border-color: var(--color-accent); background: var(--color-surface-muted); }
 .button-row { display: flex; flex-wrap: wrap; gap: var(--space-sm); margin-top: var(--space-lg); }
 .completion-panel { border-top: 3px solid var(--color-success); background: var(--color-success-soft); }
+.runtime-action-panel { border-top: 3px solid var(--color-warning); }
+.runtime-action-panel--danger { border-top-color: var(--color-danger); background: var(--color-danger-soft); }
+.runtime-action-panel h2 { margin-bottom: var(--space-sm); font-size: var(--text-xl); }
 .loading-page { display: grid; min-height: 100vh; place-items: center; font-family: var(--font-mono); }
 
 @keyframes pulse { 50% { opacity: 0.35; transform: scale(0.82); } }
@@ -93,7 +100,7 @@ pre { max-width: 100%; margin: var(--space-sm) 0 0; padding: var(--space-md); ov
   .launch-copy h1 { font-size: clamp(2.25rem, 12vw, 3.5rem); }
   .task-header, .section-heading { align-items: flex-start; flex-direction: column; }
   .workbench-shell { width: min(100% - 1.5rem, 45rem); }
-  .timeline-panel, .interaction-panel, .context-panel, .completion-panel { padding: var(--space-md); }
+  .timeline-panel, .interaction-panel, .context-panel, .completion-panel, .runtime-action-panel { padding: var(--space-md); }
 }
 
 @media (prefers-reduced-motion: reduce) {

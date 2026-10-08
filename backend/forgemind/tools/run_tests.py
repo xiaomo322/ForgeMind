@@ -16,6 +16,10 @@ from forgemind.schema.run_tests import (
     RunTestsResult,
     TestOutcome,
 )
+from forgemind.tools.process_environment import (
+    build_safe_process_environment,
+    redact_process_temporary_path,
+)
 
 
 MAX_TEST_OUTPUT_BYTES = 64 * 1024
@@ -341,6 +345,7 @@ def run_pytest(
                 completed_process = subprocess.run(
                     command,
                     cwd=project_root.resolve(),
+                    env=build_safe_process_environment(temporary_root),
                     stdout=stdout_stream,
                     stderr=stderr_stream,
                     timeout=arguments.timeout_seconds,
@@ -358,6 +363,8 @@ def run_pytest(
             stderr, stderr_truncated = _read_bounded_text(
                 stderr_path
             )
+            stdout = redact_process_temporary_path(stdout, temporary_root)
+            stderr = redact_process_temporary_path(stderr, temporary_root)
 
             raise PytestProcessTimeoutError(
                 timeout_seconds=arguments.timeout_seconds,
@@ -383,6 +390,8 @@ def run_pytest(
         stderr, stderr_truncated = _read_bounded_text(
             stderr_path
         )
+        stdout = redact_process_temporary_path(stdout, temporary_root)
+        stderr = redact_process_temporary_path(stderr, temporary_root)
         is_output_truncated = (
             stdout_truncated or stderr_truncated
         )

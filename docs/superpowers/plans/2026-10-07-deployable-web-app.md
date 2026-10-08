@@ -1,6 +1,6 @@
 # ForgeMind Deployable Web App Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Build a trusted-user deployable ForgeMind web application where a browser uploads Python files, creates a task, follows Agent progress over SSE, answers questions, and approves or rejects protected actions.
 
@@ -29,11 +29,11 @@
 - Produces: `UploadedFileInfo`, `UploadedWorkspace`, `WorkspaceUpload`, `FileSystemWorkspaceStore.create(uploads)`, and `FileSystemWorkspaceStore.resolve(workspace_id)`.
 - `WorkspaceUpload` contains `filename: str` and `content: bytes`; the HTTP layer converts `UploadFile` into this transport-independent type.
 
-- [ ] Write failing tests for one file, multiple files, restart resolution, invalid names, extension, UTF-8, duplicates, per-file size, total size, and maximum count.
-- [ ] Run `.venv\Scripts\python.exe -X utf8 -m pytest -s -p no:cacheprovider --basetemp=.test-tmp\workspace-store-red tests/api/test_workspace_store.py` and verify missing imports fail.
-- [ ] Implement immutable Pydantic response models, typed domain errors, streaming-independent validation, temporary-directory writes, cleanup on failure, and atomic rename to `workspace_<uuid>`.
-- [ ] Run the same test command with `workspace-store-green` and verify every failure leaves no final workspace.
-- [ ] Commit `backend/forgemind/web/workspaces.py` and `tests/api/test_workspace_store.py` as `feat: add isolated uploaded workspaces`.
+- [x] Write failing tests for one file, multiple files, restart resolution, invalid names, extension, UTF-8, duplicates, per-file size, total size, and maximum count.
+- [x] Run `.venv\Scripts\python.exe -X utf8 -m pytest -s -p no:cacheprovider --basetemp=.test-tmp\workspace-store-red tests/api/test_workspace_store.py` and verify missing imports fail.
+- [x] Implement immutable Pydantic response models, typed domain errors, streaming-independent validation, temporary-directory writes, cleanup on failure, and atomic rename to `workspace_<uuid>`.
+- [x] Run the same test command with `workspace-store-green` and verify every failure leaves no final workspace.
+- [x] Commit `backend/forgemind/web/workspaces.py` and `tests/api/test_workspace_store.py` as `feat: add isolated uploaded workspaces`.
 
 ### Task 2: Multipart workspace API
 
@@ -47,11 +47,11 @@
 - Adds `POST /workspaces` with `files: list[UploadFile]` and HTTP 201 `UploadedWorkspace` response.
 - `create_agent_stream_app(application, workspace_store)` receives the store explicitly.
 
-- [ ] Add a failing TestClient multipart test using `files=[("files", ("calculator.py", b"def add(a, b):\n    return a + b\n", "text/x-python"))]`.
-- [ ] Verify the route is absent or factory signature is missing.
-- [ ] Add `python-multipart` and implement the route, reading each upload with a bounded `MAX_FILE_SIZE + 1` limit before calling the store.
-- [ ] Map upload errors to 409, 413, 415, or 422 without absolute paths in `detail`.
-- [ ] Run workspace store and API tests, then commit as `feat: expose workspace upload API`.
+- [x] Add a failing TestClient multipart test using `files=[("files", ("calculator.py", b"def add(a, b):\n    return a + b\n", "text/x-python"))]`.
+- [x] Verify the route is absent or factory signature is missing.
+- [x] Add `python-multipart` and implement the route, reading each upload with a bounded `MAX_FILE_SIZE + 1` limit before calling the store.
+- [x] Map upload errors to 409, 413, 415, or 422 without absolute paths in `detail`.
+- [x] Run workspace store and API tests, then commit as `feat: expose workspace upload API`.
 
 ### Task 3: Create tasks from workspace IDs
 
@@ -63,10 +63,10 @@
 - `CreateTaskRequest(original_request: str, workspace_id: str)` replaces the Web-only `project_root` request field.
 - `CreatedTaskResponse` returns `task_id`, `original_request`, `workspace_id`, `status`, and `revision`; it never exposes `project_root`.
 
-- [ ] Rewrite the existing happy-path API test to upload a workspace first and create a task with its ID; assert the internal TaskRecord root equals `workspace_store.resolve(id)`.
-- [ ] Add a failing unknown-workspace test expecting 404 and zero SQLite tasks.
-- [ ] Update the request/response models and route while leaving `ForgeMindApplication.create_task(Path)` and CLI unchanged.
-- [ ] Run `tests/api/test_task_api.py` and commit as `feat: create web tasks from uploaded workspaces`.
+- [x] Rewrite the existing happy-path API test to upload a workspace first and create a task with its ID; assert the internal TaskRecord root equals `workspace_store.resolve(id)`.
+- [x] Add a failing unknown-workspace test expecting 404 and zero SQLite tasks.
+- [x] Update the request/response models and route while leaving `ForgeMindApplication.create_task(Path)` and CLI unchanged.
+- [x] Run `tests/api/test_task_api.py` and commit as `feat: create web tasks from uploaded workspaces`.
 
 ### Task 4: Task state and permission APIs
 
@@ -81,11 +81,11 @@
 - Adds `POST /tasks/{task_id}/permissions/{permission_request_id}` with `{decision: "approve" | "reject", raw_response: str}`.
 - Permission response returns updated public task state.
 
-- [ ] Write a failing state test proving the response can restore a waiting question and does not contain the internal root.
-- [ ] Implement the public state mapper with `jsonable_encoder` for Action history.
-- [ ] Write failing approve/reject tests against real SQLite waiting state, checking file effects and state transitions.
-- [ ] Implement permission routing through `application.decide_permission()` and map missing/stale references to 404/409.
-- [ ] Run both API test files and commit as `feat: expose task state and permission decisions`.
+- [x] Write a failing state test proving the response can restore a waiting question and does not contain the internal root.
+- [x] Implement the public state mapper with `jsonable_encoder` for Action history.
+- [x] Write failing approve/reject tests against real SQLite waiting state, checking file effects and state transitions.
+- [x] Implement permission routing through `application.decide_permission()` and map missing/stale references to 404/409.
+- [x] Run both API test files and commit as `feat: expose task state and permission decisions`.
 
 ### Task 5: Frontend-ready SSE terminal and permission events
 
@@ -98,10 +98,10 @@
 - Permission events contain `permission_request_id`, `tool_name`, reason, and relative action arguments.
 - Completed events contain the final summary; failed events contain a public error category and message.
 
-- [ ] Add failing tests for edit permission waiting, completion after `agent.step`, and an execution exception converted to `task.failed`.
-- [ ] Implement explicit event builders and generator branches for all three permission waiting result classes and completion.
-- [ ] Keep model hidden reasoning and server absolute paths out of all events.
-- [ ] Run SSE tests and commit as `feat: complete task event protocol`.
+- [x] Add failing tests for edit permission waiting, completion after `agent.step`, and an execution exception converted to `task.failed`.
+- [x] Implement explicit event builders and generator branches for all three permission waiting result classes and completion.
+- [x] Keep model hidden reasoning and server absolute paths out of all events.
+- [x] Run SSE tests and commit as `feat: complete task event protocol`.
 
 ### Task 6: Production FastAPI application
 
@@ -115,11 +115,11 @@
 - `WebSettings` reads `FORGEMIND_DATA_DIR`, `FORGEMIND_MODEL_CONFIG`, `FORGEMIND_STATIC_DIR`, and optional `FORGEMIND_CORS_ORIGINS`.
 - Adds console command `forgemind-web = forgemind.web.app:main`.
 
-- [ ] Write failing tests using temporary data/config/static directories; verify SQLite and workspaces live below the data directory.
-- [ ] Implement state/model/application/store wiring and narrowly configured CORS for development origins.
-- [ ] Mount built static assets after API routes and return `index.html` for frontend paths without swallowing `/tasks` or `/workspaces`.
-- [ ] Test app construction and command argument generation without calling an external model.
-- [ ] Run API tests and commit as `feat: add production web application`.
+- [x] Write failing tests using temporary data/config/static directories; verify SQLite and workspaces live below the data directory.
+- [x] Implement state/model/application/store wiring and narrowly configured CORS for development origins.
+- [x] Mount built static assets after API routes and return `index.html` for frontend paths without swallowing `/tasks` or `/workspaces`.
+- [x] Test app construction and command argument generation without calling an external model.
+- [x] Run API tests and commit as `feat: add production web application`.
 
 ### Task 7: React TypeScript frontend foundation
 
@@ -133,10 +133,10 @@
 - `connectTaskEvents(taskId, callbacks)` owns `EventSource` lifecycle.
 - A pure reducer converts public task events into UI timeline state.
 
-- [ ] Initialize Vite React TypeScript with pnpm and add Vitest plus Testing Library.
-- [ ] Write failing reducer tests for step, question, permission, completion, and failure events.
-- [ ] Implement strict TypeScript discriminated unions, fetch error parsing, and the reducer.
-- [ ] Run `pnpm --dir frontend test` and `pnpm --dir frontend build`; commit as `feat: add web client data layer`.
+- [x] Initialize Vite React TypeScript with pnpm and add Vitest plus Testing Library.
+- [x] Write failing reducer tests for step, question, permission, completion, and failure events.
+- [x] Implement strict TypeScript discriminated unions, fetch error parsing, and the reducer.
+- [x] Run `pnpm --dir frontend test` and `pnpm --dir frontend build`; commit as `feat: add web client data layer`.
 
 ### Task 8: Complete user interface
 
@@ -155,11 +155,11 @@
 - Timeline cards render Agent reason, Tool name, arguments, Observation status, question options, permission actions, completion, and errors.
 - Refresh restoration uses a task ID persisted in the URL query and `GET /tasks/{task_id}`.
 
-- [ ] Write UI tests for upload validation, successful transition to a task, answering a question, and approving/rejecting permission.
-- [ ] Implement accessible forms, keyboard focus, loading/disabled states, inline errors, responsive layout, and semantic status colors.
-- [ ] Avoid hidden chain-of-thought language; label model `reason` as “决策依据”.
-- [ ] Run frontend tests/build and inspect the built UI in a real browser at desktop and narrow widths.
-- [ ] Commit as `feat: add ForgeMind web interface`.
+- [x] Write UI tests for upload validation, successful transition to a task, answering a question, and approving/rejecting permission.
+- [x] Implement accessible forms, keyboard focus, loading/disabled states, inline errors, responsive layout, and semantic status colors.
+- [x] Avoid hidden chain-of-thought language; label model `reason` as “决策依据”.
+- [x] Run frontend tests/build and inspect the built UI in a real browser at desktop and narrow widths.
+- [x] Commit as `feat: add ForgeMind web interface`.
 
 ### Task 9: Single-server container deployment
 
@@ -175,10 +175,10 @@
 - Multi-stage image builds `frontend/dist`, installs ForgeMind, and starts `uvicorn forgemind.web.app:app --host 0.0.0.0 --port 8000`.
 - Compose mounts `forgemind-data:/data`, supplies `DEEPSEEK_API_KEY`, and maps port 8000.
 
-- [ ] Add a failing static-hosting test for `/` and an SPA route.
-- [ ] Implement container files and trusted-user deployment documentation, including persistence, API key, model config, health check, backup, and the lack of public code-execution isolation.
-- [ ] Run Python tests, frontend tests/build, Docker build when Docker is available, and a local HTTP smoke test.
-- [ ] Commit as `feat: package deployable ForgeMind web app`.
+- [x] Add a failing static-hosting test for `/` and an SPA route.
+- [x] Implement container files and trusted-user deployment documentation, including persistence, API key, model config, health check, backup, and the lack of public code-execution isolation.
+- [x] Run Python tests, frontend tests/build, Docker build when Docker is available, and a local HTTP smoke test.
+- [x] Commit as `feat: package deployable ForgeMind web app`.
 
 ### Task 10: Final end-to-end verification
 
@@ -190,8 +190,8 @@
 **Interfaces:**
 - Covers upload → task creation → SSE read → permission/user interaction → completion using real FastAPI, filesystem workspace, SQLite, and a deterministic fake model.
 
-- [ ] Write the end-to-end test with visible UTF-8 diagnostic output and exact public API assertions.
-- [ ] Run focused E2E, all Python tests, frontend tests, TypeScript build, and production static smoke test.
-- [ ] Record exact verification counts and deployment limits in project documentation.
-- [ ] Review the final diff for absolute-path leaks, secrets, unrelated changes, and stale instructions.
-- [ ] Commit as `test: verify deployable web workflow`.
+- [x] Write the end-to-end test with visible UTF-8 diagnostic output and exact public API assertions.
+- [x] Run focused E2E, all Python tests, frontend tests, TypeScript build, and production static smoke test.
+- [x] Record exact verification counts and deployment limits in project documentation.
+- [x] Review the final diff for absolute-path leaks, secrets, unrelated changes, and stale instructions.
+- [x] Commit as `test: verify deployable web workflow`.

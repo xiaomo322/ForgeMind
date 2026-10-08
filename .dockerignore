@@ -1,0 +1,17 @@
+.git
+.github
+.venv
+.idea
+.vscode
+.pytest_cache
+.test-tmp
+__pycache__
+*.py[cod]
+*.db
+*.sqlite*
+.env
+frontend/node_modules
+frontend/dist
+docs
+examples
+tests

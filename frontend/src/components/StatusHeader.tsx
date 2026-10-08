@@ -1,12 +1,14 @@
-import type { TaskStatus } from "../types";
+import type { TaskUiStatus } from "../taskState";
 
-const STATUS_LABEL: Record<TaskStatus, string> = {
+const STATUS_LABEL: Record<TaskUiStatus, string> = {
   running: "Agent 正在工作",
   waiting_user: "等待你的决定",
   executing: "正在执行 Tool",
   completed: "任务已完成",
   blocked: "任务受阻",
   cancelled: "任务已取消",
+  paused: "本轮执行已暂停",
+  failed: "连接或执行失败",
 };
 
 export function StatusHeader({
@@ -16,7 +18,7 @@ export function StatusHeader({
   onNewTask,
 }: {
   taskId: string;
-  status: TaskStatus;
+  status: TaskUiStatus;
   request: string;
   onNewTask: () => void;
 }) {

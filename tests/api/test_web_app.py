@@ -86,6 +86,34 @@ def test_static_files_and_frontend_routes_return_built_app(tmp_path: Path) -> No
     assert client.get("/workspace/new").text == "<h1>ForgeMind UI</h1>"
 
 
+def test_web_responses_include_browser_security_headers(tmp_path: Path) -> None:
+    """部署入口应给 API 和静态页面统一增加基础浏览器安全边界。"""
+
+    config_path = tmp_path / "model.toml"
+    write_model_config(config_path)
+    static_dir = tmp_path / "dist"
+    static_dir.mkdir()
+    (static_dir / "index.html").write_text("<h1>ForgeMind</h1>", encoding="utf-8")
+    app = create_web_app(
+        WebSettings(
+            data_dir=tmp_path / "data",
+            model_config_path=config_path,
+            static_dir=static_dir,
+        ),
+        environment={"TEST_MODEL_KEY": "test-secret"},
+        client_factory=FakeClient,
+    )
+    client = TestClient(app)
+
+    for path in ("/health", "/"):
+        response = client.get(path)
+        print(path, "安全响应头：", dict(response.headers))
+        assert response.headers["x-content-type-options"] == "nosniff"
+        assert response.headers["x-frame-options"] == "DENY"
+        assert response.headers["referrer-policy"] == "no-referrer"
+        assert "default-src 'self'" in response.headers["content-security-policy"]
+
+
 def test_web_settings_read_environment_without_guessing_paths(tmp_path: Path) -> None:
     settings = WebSettings.from_environment(
         {

@@ -3,6 +3,8 @@
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor
+from threading import Event, Lock
 
 import pytest
 from fastapi.testclient import TestClient
@@ -182,6 +184,71 @@ def test_generate_agent_step_events_drives_one_real_step_per_next(
     assert len(model.received_inputs) == 2
 
 
+def test_generate_agent_step_events_reports_batch_limit_before_stopping(
+    tmp_path: Path,
+) -> None:
+    """一批步骤耗尽时必须明确暂停，不能让浏览器静默自动重连。"""
+
+    (tmp_path / "app.py").write_text("value = 1\n", encoding="utf-8")
+    model = SequenceModel(
+        responses=[
+            json.dumps(
+                {
+                    "action_type": "tool_call",
+                    "tool_name": "search_code",
+                    "arguments": {"query": "value", "scope": "."},
+                    "reason": "先查找代码",
+                },
+                ensure_ascii=False,
+            )
+        ]
+    )
+    application = ForgeMindApplication(
+        state=SQLiteForgeMindState.open(tmp_path / "state.db"),
+        model=model,
+    )
+    task = application.create_task("查找 value", tmp_path)
+
+    events = list(
+        generate_agent_step_events(application, task.task_id, max_steps=1)
+    )
+
+    assert [event.event for event in events] == [
+        "agent.step",
+        "task.step_limit_reached",
+    ]
+    assert events[1].sequence == 2
+    assert events[1].data == {
+        "max_steps": 1,
+        "message": "本轮已执行 1 步，任务仍未结束。请检查结果后再继续。",
+    }
+    assert application.get_task(task.task_id).current_status.status is TaskStatus.RUNNING
+    assert len(model.received_inputs) == 1
+
+
+def test_parse_failure_stops_browser_reconnect_until_user_retries(
+    tmp_path: Path,
+) -> None:
+    """模型输出不合法时要显式失败，避免 EventSource 无限自动重连。"""
+
+    model = SequenceModel(responses=["not json"])
+    application = ForgeMindApplication(
+        state=SQLiteForgeMindState.open(tmp_path / "state.db"),
+        model=model,
+    )
+    task = application.create_task("分析项目", tmp_path)
+
+    events = list(generate_agent_step_events(application, task.task_id))
+
+    assert [event.event for event in events] == ["agent.step", "task.failed"]
+    assert events[1].data == {
+        "category": "model_output_invalid",
+        "message": "模型输出不符合决策协议，请检查记录后重试。",
+    }
+    assert application.get_task(task.task_id).current_status.status is TaskStatus.RUNNING
+    assert len(model.received_inputs) == 1
+
+
 def test_agent_stream_route_sends_real_steps_as_sse(tmp_path: Path) -> None:
     """FastAPI 路由应把真实 Agent 步骤编码成有序 SSE 事件。"""
 
@@ -246,6 +313,8 @@ def test_agent_stream_route_sends_real_steps_as_sse(tmp_path: Path) -> None:
     # 第六步（检查结果）：两轮按顺序到达，且来自同一个真实任务。
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/event-stream")
+    assert response.headers["cache-control"] == "no-cache"
+    assert response.headers["x-accel-buffering"] == "no"
     assert len(blocks) == 3
     assert first_lines[:2] == ["event: agent.step", "id: 1"]
     assert second_lines[:2] == ["event: agent.step", "id: 2"]
@@ -542,3 +611,53 @@ def test_answer_post_rejects_unknown_question_id_without_changing_waiting_state(
     assert answer_response.status_code == 404
     assert task_view.current_status.status is TaskStatus.WAITING_USER
     assert task_view.actions[0].user_response is None
+
+
+def test_only_one_sse_connection_can_drive_the_same_task(tmp_path: Path) -> None:
+    """两个标签页不能基于同一旧 State 同时调用模型。"""
+
+    started = Event()
+    release_first_call = Event()
+    call_lock = Lock()
+    call_count = 0
+
+    class BlockingCompletionModel:
+        def generate(self, turn_input: object) -> str:
+            nonlocal call_count
+            with call_lock:
+                call_count += 1
+                current_call = call_count
+            if current_call == 1:
+                started.set()
+                assert release_first_call.wait(timeout=5)
+            return json.dumps(
+                {
+                    "action_type": "complete",
+                    "reason": "并发租约测试",
+                    "summary": "任务完成",
+                },
+                ensure_ascii=False,
+            )
+
+    application = ForgeMindApplication(
+        state=SQLiteForgeMindState.open(tmp_path / "state.db"),
+        model=BlockingCompletionModel(),
+    )
+    task = application.create_task("验证同任务执行租约", tmp_path)
+    client = TestClient(create_agent_stream_app(application))
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        first_future = executor.submit(
+            client.get,
+            f"/tasks/{task.task_id}/events",
+        )
+        assert started.wait(timeout=5)
+        second_response = client.get(f"/tasks/{task.task_id}/events")
+        release_first_call.set()
+        first_response = first_future.result(timeout=5)
+
+    print("第一个 SSE 状态：", first_response.status_code)
+    print("并发 SSE 状态：", second_response.status_code, second_response.text)
+    assert first_response.status_code == 200
+    assert second_response.status_code == 409
+    assert call_count == 1

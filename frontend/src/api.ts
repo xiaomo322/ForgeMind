@@ -115,6 +115,7 @@ const EVENT_TYPES: TaskEvent["type"][] = [
   "task.waiting_user",
   "task.permission_required",
   "task.completed",
+  "task.step_limit_reached",
   "task.failed",
 ];
 
@@ -140,6 +141,7 @@ export function connectTaskEvents(
         type === "task.waiting_user" ||
         type === "task.permission_required" ||
         type === "task.completed" ||
+        type === "task.step_limit_reached" ||
         type === "task.failed"
       ) {
         source.close();

@@ -8,14 +8,28 @@ import type {
 
 export type TimelineItem =
   | { kind: "step"; sequence: number; data: Extract<TaskEvent, { type: "agent.step" }>["data"] }
-  | { kind: "question"; sequence: number; data: WaitingUserData }
-  | { kind: "permission"; sequence: number; data: PermissionRequiredData }
+  | {
+      kind: "question";
+      sequence: number;
+      data: WaitingUserData;
+      response: Record<string, unknown> | null;
+    }
+  | {
+      kind: "permission";
+      sequence: number;
+      data: PermissionRequiredData;
+      decision: Record<string, unknown> | null;
+    }
   | { kind: "completion"; sequence: number; summary: string }
+  | { kind: "pause"; sequence: number; message: string }
   | { kind: "failure"; sequence: number; message: string };
+
+// paused/failed 是浏览器本地的连接状态；其余值来自 SQLite 中的任务状态。
+export type TaskUiStatus = TaskStatus | "paused" | "failed";
 
 export interface TaskUiState {
   taskId: string;
-  status: TaskStatus;
+  status: TaskUiStatus;
   timeline: TimelineItem[];
   pendingQuestion: WaitingUserData | null;
   pendingPermission: PermissionRequiredData | null;
@@ -26,7 +40,8 @@ export interface TaskUiState {
 export type TaskStateAction =
   | TaskEvent
   | { type: "task.snapshot"; state: TaskUiState }
-  | { type: "task.resumed" };
+  | { type: "task.resumed" }
+  | { type: "stream.connection_failed"; message: string };
 
 function text(value: unknown): string {
   return typeof value === "string" ? value : "";
@@ -68,12 +83,8 @@ export function hydrateTaskUiState(task: PublicTaskState): TaskUiState {
         summary: state.summary,
       });
     }
-    if (
-      action.action_type === "ask_user" &&
-      item.user_response === null &&
-      task.status === "waiting_user"
-    ) {
-      state.pendingQuestion = {
+    if (action.action_type === "ask_user") {
+      const question: WaitingUserData = {
         question_action_id: text(action.action_id),
         reason: text(action.reason),
         question: text(action.question),
@@ -82,16 +93,16 @@ export function hydrateTaskUiState(task: PublicTaskState): TaskUiState {
       state.timeline.push({
         kind: "question",
         sequence: item.sequence * 2,
-        data: state.pendingQuestion,
+        data: question,
+        response: item.user_response,
       });
+      if (item.user_response === null && task.status === "waiting_user") {
+        state.pendingQuestion = question;
+      }
     }
-    if (
-      item.permission_request !== null &&
-      item.permission_decision === null &&
-      task.status === "waiting_user"
-    ) {
+    if (item.permission_request !== null) {
       const request = item.permission_request;
-      state.pendingPermission = {
+      const permission: PermissionRequiredData = {
         permission_request_id: text(request.permission_request_id),
         tool_name: text(request.tool_name),
         reason: text(request.reason),
@@ -103,8 +114,12 @@ export function hydrateTaskUiState(task: PublicTaskState): TaskUiState {
       state.timeline.push({
         kind: "permission",
         sequence: item.sequence * 2,
-        data: state.pendingPermission,
+        data: permission,
+        decision: item.permission_decision,
       });
+      if (item.permission_decision === null && task.status === "waiting_user") {
+        state.pendingPermission = permission;
+      }
     }
   });
   return state;
@@ -149,7 +164,10 @@ export function taskStateReducer(state: TaskUiState, event: TaskStateAction): Ta
         status: "waiting_user",
         pendingQuestion: event.data,
         pendingPermission: null,
-        timeline: [...state.timeline, { kind: "question", sequence: event.sequence, data: event.data }],
+        timeline: [
+          ...state.timeline,
+          { kind: "question", sequence: event.sequence, data: event.data, response: null },
+        ],
       };
     case "task.permission_required":
       return {
@@ -157,7 +175,10 @@ export function taskStateReducer(state: TaskUiState, event: TaskStateAction): Ta
         status: "waiting_user",
         pendingQuestion: null,
         pendingPermission: event.data,
-        timeline: [...state.timeline, { kind: "permission", sequence: event.sequence, data: event.data }],
+        timeline: [
+          ...state.timeline,
+          { kind: "permission", sequence: event.sequence, data: event.data, decision: null },
+        ],
       };
     case "task.completed":
       return {
@@ -174,10 +195,35 @@ export function taskStateReducer(state: TaskUiState, event: TaskStateAction): Ta
     case "task.failed":
       return {
         ...state,
+        status: "failed",
+        pendingQuestion: null,
+        pendingPermission: null,
         error: event.data.message,
         timeline: [
           ...state.timeline,
           { kind: "failure", sequence: event.sequence, message: event.data.message },
+        ],
+      };
+    case "task.step_limit_reached":
+      return {
+        ...state,
+        status: "paused",
+        pendingQuestion: null,
+        pendingPermission: null,
+        error: null,
+        timeline: [
+          ...state.timeline,
+          { kind: "pause", sequence: event.sequence, message: event.data.message },
+        ],
+      };
+    case "stream.connection_failed":
+      return {
+        ...state,
+        status: "failed",
+        error: event.message,
+        timeline: [
+          ...state.timeline,
+          { kind: "failure", sequence: state.timeline.length + 1, message: event.message },
         ],
       };
   }

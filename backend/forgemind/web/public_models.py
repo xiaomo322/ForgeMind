@@ -2,11 +2,11 @@
 
 from typing import Any
 
-from fastapi.encoders import jsonable_encoder
 from pydantic import Field
 
 from forgemind.schema.base import StrictContractModel
 from forgemind.schema.tasks import TaskStateView, TaskStatus
+from forgemind.web.public_values import encode_public_value
 
 
 class PublicActionState(StrictContractModel):
@@ -33,27 +33,28 @@ class PublicTaskState(StrictContractModel):
 def build_public_task_state(view: TaskStateView) -> PublicTaskState:
     """从 Runtime 权威视图投影出不会泄露 project_root 的 Web 模型。"""
 
+    hidden_paths = (view.task.project_root,)
     actions = tuple(
         PublicActionState(
             sequence=item.sequence,
-            action=jsonable_encoder(item.action),
+            action=encode_public_value(item.action, hidden_paths=hidden_paths),
             user_response=(
-                jsonable_encoder(item.user_response)
+                encode_public_value(item.user_response, hidden_paths=hidden_paths)
                 if item.user_response is not None
                 else None
             ),
             permission_request=(
-                jsonable_encoder(item.permission_request)
+                encode_public_value(item.permission_request, hidden_paths=hidden_paths)
                 if item.permission_request is not None
                 else None
             ),
             permission_decision=(
-                jsonable_encoder(item.permission_decision)
+                encode_public_value(item.permission_decision, hidden_paths=hidden_paths)
                 if item.permission_decision is not None
                 else None
             ),
             observation=(
-                jsonable_encoder(item.observation)
+                encode_public_value(item.observation, hidden_paths=hidden_paths)
                 if item.observation is not None
                 else None
             ),
