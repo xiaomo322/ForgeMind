@@ -3,9 +3,15 @@ import { useState, type FormEvent } from "react";
 const MAX_FILES = 20;
 const MAX_FILE_SIZE = 1024 * 1024;
 const MAX_TOTAL_SIZE = 5 * 1024 * 1024;
+const MAX_ZIP_SIZE = 10 * 1024 * 1024;
 
 function validateFiles(files: File[]): string | null {
-  if (files.length === 0) return "请至少选择一个 Python 文件。";
+  if (files.length === 0) return "请选择 Python 文件或一个项目 ZIP。";
+  const zipFiles = files.filter((file) => file.name.toLowerCase().endsWith(".zip"));
+  if (zipFiles.length > 0) {
+    if (files.length !== 1) return "ZIP 需要单独上传，不能和 Python 文件混合。";
+    return zipFiles[0].size > MAX_ZIP_SIZE ? "ZIP 不能超过 10 MiB。" : null;
+  }
   if (files.length > MAX_FILES) return "一次最多上传 20 个文件。";
   const names = new Set<string>();
   let total = 0;
@@ -61,20 +67,20 @@ export function WorkspaceForm({ onStart }: WorkspaceFormProps) {
         <p className="machine-label">NEW WORKSPACE</p>
         <h1>把代码交给 Agent，保留每一步证据。</h1>
         <p>
-          上传 1–20 个 UTF-8 Python 文件，再描述目标。ForgeMind 会读取、检索、修改和验证；高风险操作先等你确认。
+          上传一个完整项目 ZIP，或选择 1–20 个 UTF-8 Python 文件，再描述目标。任务和工作区会持久保存。
         </p>
       </div>
 
       <div className="form-field file-field">
-        <label htmlFor="python-files">选择 Python 文件</label>
+        <label htmlFor="python-files">选择 Python 文件或项目 ZIP</label>
         <input
           id="python-files"
           type="file"
-          accept=".py,text/x-python"
+          accept=".py,.zip,text/x-python,application/zip"
           multiple
           onChange={(event) => selectFiles(Array.from(event.target.files ?? []))}
         />
-        <span className="field-help">单个文件 ≤ 1 MiB，总计 ≤ 5 MiB</span>
+        <span className="field-help">Python 文件总计 ≤ 5 MiB；单个 ZIP ≤ 10 MiB</span>
       </div>
 
       {files.length > 0 && (

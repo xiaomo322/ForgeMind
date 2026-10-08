@@ -108,6 +108,32 @@ class SQLiteTaskRegistry:
             raise KeyError(task_id)
 
         project_root, payload_json = row
+        return self._restore(task_id, project_root, payload_json)
+
+    def list_recent(self, limit: int) -> tuple[TaskRecord, ...]:
+        """按 SQLite 插入顺序返回最近创建的任务。"""
+
+        if not 1 <= limit <= 100:
+            raise ValueError("limit 必须在 1 到 100 之间")
+        with open_sqlite_connection(self._database_path) as connection:
+            rows = connection.execute(
+                """
+                SELECT task_id, project_root, payload_json
+                FROM tasks
+                ORDER BY rowid DESC
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+        return tuple(
+            self._restore(task_id, project_root, payload_json)
+            for task_id, project_root, payload_json in rows
+        )
+
+    @staticmethod
+    def _restore(task_id: str, project_root: str, payload_json: str) -> TaskRecord:
+        """解析存储 JSON，并核对不可独立篡改的索引列。"""
+
         try:
             task = TaskRecord.model_validate_json(payload_json)
         except ValidationError as exc:

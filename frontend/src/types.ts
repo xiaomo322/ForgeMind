@@ -18,6 +18,14 @@ export interface UploadedWorkspace {
   total_size_bytes: number;
 }
 
+export interface TaskSummary {
+  task_id: string;
+  original_request: string;
+  workspace_id: string | null;
+  status: TaskStatus;
+  revision: number;
+}
+
 export interface PublicActionState {
   sequence: number;
   action: Record<string, unknown>;

@@ -5,6 +5,7 @@ import type {
   StagedUpload,
   TaskMessageAccepted,
   TaskFile,
+  TaskSummary,
 } from "./types";
 
 interface CreatedTask {
@@ -65,6 +66,12 @@ export async function uploadWorkspace(files: File[]): Promise<UploadedWorkspace>
   return jsonRequest<UploadedWorkspace>("/workspaces", { method: "POST", body });
 }
 
+export async function uploadWorkspaceArchive(archive: File): Promise<UploadedWorkspace> {
+  const body = new FormData();
+  body.append("archive", archive, archive.name);
+  return jsonRequest<UploadedWorkspace>("/workspaces/archive", { method: "POST", body });
+}
+
 export async function createTask(
   originalRequest: string,
   workspaceId: string,
@@ -78,6 +85,11 @@ export async function createTask(
 
 export async function getTask(taskId: string): Promise<PublicTaskState> {
   return jsonRequest<PublicTaskState>(`/tasks/${encodeURIComponent(taskId)}`);
+}
+
+export async function listTasks(limit = 50): Promise<TaskSummary[]> {
+  const result = await jsonRequest<{ tasks: TaskSummary[] }>(`/tasks?limit=${limit}`);
+  return result.tasks;
 }
 
 export async function stageTaskFiles(taskId: string, files: File[]): Promise<StagedUpload[]> {

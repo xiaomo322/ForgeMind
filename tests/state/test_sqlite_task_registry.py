@@ -54,6 +54,17 @@ def test_missing_task_id_raises_key_error(tmp_path: Path) -> None:
         registry.get("missing-task")
 
 
+def test_list_recent_returns_newest_tasks_first_with_limit(tmp_path: Path) -> None:
+    registry = SQLiteTaskRegistry(tmp_path / "state.db")
+    first = _task(tmp_path, "task-first")
+    second = _task(tmp_path, "task-second")
+    third = _task(tmp_path, "task-third")
+    for task in (first, second, third):
+        registry.register(task)
+
+    assert registry.list_recent(2) == (third, second)
+
+
 def test_corrupt_task_json_is_not_returned(tmp_path: Path) -> None:
     database_path = tmp_path / "state.db"
     registry = SQLiteTaskRegistry(database_path)

@@ -93,6 +93,11 @@ class ForgeMindApplication:
     def get_task(self, task_id: str) -> TaskStateView:
         return self.state.get_task_view(task_id)
 
+    def list_recent_tasks(self, limit: int = 50) -> tuple[TaskStateView, ...]:
+        """返回 SQLite 中最近创建的任务，而不是浏览器临时记录。"""
+
+        return self.state.list_recent_tasks(limit)
+
     def send_message(
         self,
         task_id: str,

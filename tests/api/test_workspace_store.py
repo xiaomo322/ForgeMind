@@ -1,7 +1,9 @@
 """上传工作区文件存储的行为测试。"""
 
 import hashlib
+from io import BytesIO
 from pathlib import Path
+from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 
 import pytest
 
@@ -18,6 +20,90 @@ from forgemind.web.workspaces import (
     WorkspaceUpload,
     WorkspaceUploadTooLargeError,
 )
+
+
+def _zip_bytes(files: dict[str, bytes]) -> bytes:
+    """构造真实 ZIP 字节，让测试验证标准库解压路径。"""
+
+    output = BytesIO()
+    with ZipFile(output, "w", ZIP_DEFLATED) as archive:
+        for name, content in files.items():
+            archive.writestr(name, content)
+    return output.getvalue()
+
+
+def test_create_from_zip_preserves_nested_project_and_exports_round_trip(
+    tmp_path: Path,
+) -> None:
+    store = FileSystemWorkspaceStore(tmp_path / "workspaces")
+    source = {
+        "src/calculator.py": b"def add(a, b):\n    return a + b\n",
+        "tests/test_calculator.py": b"def test_add():\n    assert 1 + 1 == 2\n",
+        "README.md": "# 示例项目\n".encode(),
+    }
+
+    workspace = store.create_from_zip(_zip_bytes(source))
+
+    root = store.resolve(workspace.workspace_id)
+    assert [item.path for item in workspace.files] == sorted(source)
+    assert (root / "src" / "calculator.py").read_bytes() == source["src/calculator.py"]
+    with ZipFile(BytesIO(store.build_zip(root))) as exported:
+        assert sorted(exported.namelist()) == sorted(source)
+        assert {name: exported.read(name) for name in exported.namelist()} == source
+
+
+@pytest.mark.parametrize(
+    "unsafe_name",
+    ["../secret.py", "/absolute.py", "C:/windows.py"],
+)
+def test_create_from_zip_rejects_unsafe_paths(
+    tmp_path: Path,
+    unsafe_name: str,
+) -> None:
+    store = FileSystemWorkspaceStore(tmp_path / "workspaces")
+
+    with pytest.raises(InvalidWorkspaceFilenameError):
+        store.create_from_zip(_zip_bytes({unsafe_name: b"pass\n"}))
+
+    assert list((tmp_path / "workspaces").glob("workspace_*")) == []
+
+
+def test_archive_entry_validation_rejects_backslash_paths() -> None:
+    # ZipInfo 在 Windows 构造时会主动把反斜杠改成斜杠，因此这里在
+    # 构造后赋值，模拟由其他平台或恶意工具生成的原始 ZIP 条目。
+    entry = ZipInfo("safe.py")
+    entry.filename = "folder\\escape.py"
+
+    with pytest.raises(InvalidWorkspaceFilenameError):
+        FileSystemWorkspaceStore._validate_archive_entries([entry])
+
+
+def test_create_from_zip_rejects_symbolic_links(tmp_path: Path) -> None:
+    output = BytesIO()
+    link = ZipInfo("linked.py")
+    link.create_system = 3
+    link.external_attr = 0o120777 << 16
+    with ZipFile(output, "w") as archive:
+        archive.writestr(link, "outside.py")
+
+    store = FileSystemWorkspaceStore(tmp_path / "workspaces")
+
+    with pytest.raises(InvalidWorkspaceFilenameError):
+        store.create_from_zip(output.getvalue())
+
+
+def test_create_from_zip_rejects_case_insensitive_duplicate_paths(
+    tmp_path: Path,
+) -> None:
+    output = BytesIO()
+    with ZipFile(output, "w") as archive:
+        archive.writestr("src/main.py", b"pass\n")
+        archive.writestr("SRC/MAIN.py", b"pass\n")
+
+    with pytest.raises(DuplicateWorkspaceFilenameError):
+        FileSystemWorkspaceStore(tmp_path / "workspaces").create_from_zip(
+            output.getvalue()
+        )
 
 
 def test_create_workspace_writes_python_files_and_returns_public_metadata(

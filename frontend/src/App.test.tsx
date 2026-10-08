@@ -9,7 +9,9 @@ import {
   createTask,
   decidePermission,
   getTask,
+  listTasks,
   listTaskFiles,
+  uploadWorkspaceArchive,
   uploadWorkspace,
 } from "./api";
 
@@ -20,15 +22,19 @@ vi.mock("./api", () => ({
   decidePermission: vi.fn(),
   deleteStagedFile: vi.fn(),
   getTask: vi.fn(),
+  listTasks: vi.fn(),
   listTaskFiles: vi.fn(),
   sendTaskMessage: vi.fn(),
   stageTaskFiles: vi.fn(),
   uploadWorkspace: vi.fn(),
+  uploadWorkspaceArchive: vi.fn(),
 }));
 
 const mockedUpload = vi.mocked(uploadWorkspace);
 const mockedCreate = vi.mocked(createTask);
 const mockedGetTask = vi.mocked(getTask);
+const mockedListTasks = vi.mocked(listTasks);
+const mockedUploadArchive = vi.mocked(uploadWorkspaceArchive);
 const mockedAnswer = vi.mocked(answerQuestion);
 const mockedPermission = vi.mocked(decidePermission);
 const mockedConnect = vi.mocked(connectTaskEvents);
@@ -38,6 +44,7 @@ beforeEach(() => {
   vi.resetAllMocks();
   mockedConnect.mockImplementation(() => vi.fn());
   mockedListFiles.mockResolvedValue([]);
+  mockedListTasks.mockResolvedValue([]);
   window.history.replaceState({}, "", "/");
 });
 
@@ -45,7 +52,7 @@ describe("ForgeMind App", () => {
   it("rejects a non-Python file before uploading", async () => {
     render(<App />);
 
-    fireEvent.change(screen.getByLabelText("选择 Python 文件"), {
+    fireEvent.change(screen.getByLabelText("选择 Python 文件或项目 ZIP"), {
       target: { files: [new File(["notes"], "notes.txt", { type: "text/plain" })] },
     });
 
@@ -71,7 +78,7 @@ describe("ForgeMind App", () => {
     render(<App />);
 
     await user.upload(
-      screen.getByLabelText("选择 Python 文件"),
+      screen.getByLabelText("选择 Python 文件或项目 ZIP"),
       new File(["value = 1\n"], "main.py", { type: "text/x-python" }),
     );
     await user.type(screen.getByLabelText("任务目标"), "检查价格计算");
@@ -82,6 +89,81 @@ describe("ForgeMind App", () => {
     expect(mockedUpload).toHaveBeenCalledTimes(1);
     expect(mockedCreate).toHaveBeenCalledWith("检查价格计算", "workspace-1");
     expect(mockedConnect).toHaveBeenCalled();
+  });
+
+  it("uploads one ZIP archive as a new workspace", async () => {
+    mockedUploadArchive.mockResolvedValue({
+      workspace_id: "workspace-zip",
+      files: [{ path: "src/main.py", size_bytes: 10 }],
+      file_count: 1,
+      total_size_bytes: 10,
+    });
+    mockedCreate.mockResolvedValue({
+      task_id: "task-zip",
+      original_request: "检查整个项目",
+      workspace_id: "workspace-zip",
+      status: "running",
+      revision: 1,
+    });
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.upload(
+      screen.getByLabelText("选择 Python 文件或项目 ZIP"),
+      new File(["zip-content"], "project.zip", { type: "application/zip" }),
+    );
+    await user.type(screen.getByLabelText("任务目标"), "检查整个项目");
+    await user.click(screen.getByRole("button", { name: "启动 Agent" }));
+
+    await waitFor(() => expect(mockedUploadArchive).toHaveBeenCalledTimes(1));
+    expect(mockedUpload).not.toHaveBeenCalled();
+    expect(mockedCreate).toHaveBeenCalledWith("检查整个项目", "workspace-zip");
+  });
+
+  it("rejects mixing a ZIP archive with direct Python files", async () => {
+    render(<App />);
+
+    fireEvent.change(screen.getByLabelText("选择 Python 文件或项目 ZIP"), {
+      target: {
+        files: [
+          new File(["zip"], "project.zip", { type: "application/zip" }),
+          new File(["pass\n"], "main.py", { type: "text/x-python" }),
+        ],
+      },
+    });
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "ZIP 需要单独上传",
+    );
+    expect(mockedUploadArchive).not.toHaveBeenCalled();
+  });
+
+  it("opens a persisted task from the history drawer", async () => {
+    mockedListTasks.mockResolvedValue([
+      {
+        task_id: "task-old",
+        original_request: "恢复旧任务",
+        workspace_id: "workspace-old",
+        status: "completed",
+        revision: 4,
+      },
+    ]);
+    mockedGetTask.mockResolvedValue({
+      task_id: "task-old",
+      original_request: "恢复旧任务",
+      status: "completed",
+      revision: 4,
+      actions: [],
+    });
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "历史任务" }));
+    await user.click(await screen.findByRole("button", { name: /恢复旧任务/ }));
+
+    await waitFor(() => expect(mockedGetTask).toHaveBeenCalledWith("task-old"));
+    expect(window.location.search).toBe("?task=task-old");
+    expect((await screen.findAllByText("恢复旧任务")).length).toBeGreaterThan(0);
   });
 
   it("restores and answers an Agent question", async () => {
@@ -261,6 +343,10 @@ describe("ForgeMind App", () => {
     const trigger = await screen.findByRole("button", { name: "项目文件 · 1" });
     await user.click(trigger);
     expect(screen.getByRole("complementary", { name: "项目文件" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "下载工作区 ZIP" })).toHaveAttribute(
+      "href",
+      "/tasks/task-files/workspace.zip",
+    );
 
     await user.click(trigger);
     expect(screen.queryByRole("complementary", { name: "项目文件" })).not.toBeInTheDocument();

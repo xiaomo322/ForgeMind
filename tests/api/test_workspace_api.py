@@ -1,6 +1,8 @@
 """浏览器 multipart 上传工作区的 API 测试。"""
 
+from io import BytesIO
 from pathlib import Path
+from zipfile import ZipFile
 
 from fastapi.testclient import TestClient
 import pytest
@@ -25,6 +27,29 @@ def make_client(tmp_path: Path) -> tuple[TestClient, FileSystemWorkspaceStore]:
     )
     store = FileSystemWorkspaceStore(tmp_path / "workspaces")
     return TestClient(create_agent_stream_app(application, store)), store
+
+
+def test_post_workspace_archive_creates_nested_persistent_workspace(
+    tmp_path: Path,
+) -> None:
+    client, store = make_client(tmp_path)
+    content = BytesIO()
+    with ZipFile(content, "w") as archive:
+        archive.writestr("src/main.py", b"print('ok')\n")
+        archive.writestr("README.md", "# Demo\n".encode())
+
+    response = client.post(
+        "/workspaces/archive",
+        files={"archive": ("demo.zip", content.getvalue(), "application/zip")},
+    )
+
+    assert response.status_code == 201
+    payload = response.json()
+    assert [item["path"] for item in payload["files"]] == [
+        "README.md",
+        "src/main.py",
+    ]
+    assert (store.resolve(payload["workspace_id"]) / "src" / "main.py").is_file()
 
 
 def test_post_workspaces_persists_python_files(tmp_path: Path) -> None:

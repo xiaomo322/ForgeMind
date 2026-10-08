@@ -1925,6 +1925,14 @@ class SQLiteForgeMindState:
             messages=self.list_message_views(task_id),
         )
 
+    def list_recent_tasks(self, limit: int) -> tuple[TaskStateView, ...]:
+        """恢复最近任务的完整当前视图，供 Web 历史列表投影使用。"""
+
+        return tuple(
+            self.get_task_view(task.task_id)
+            for task in self.tasks.list_recent(limit)
+        )
+
     def create_task(
         self,
         task: TaskRecord,

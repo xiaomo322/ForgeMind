@@ -5,11 +5,17 @@ from collections.abc import Awaitable, Callable
 from starlette.responses import JSONResponse
 from starlette.types import Message, Receive, Scope, Send
 
-from forgemind.web.workspaces import MAX_WORKSPACE_TOTAL_SIZE_BYTES
+from forgemind.web.workspaces import (
+    MAX_WORKSPACE_ARCHIVE_SIZE_BYTES,
+    MAX_WORKSPACE_TOTAL_SIZE_BYTES,
+)
 
 
 # 为 multipart boundary、Content-Disposition 和最多 20 个文件名预留空间。
-MAX_WORKSPACE_UPLOAD_REQUEST_BYTES = MAX_WORKSPACE_TOTAL_SIZE_BYTES + 256 * 1024
+MAX_WORKSPACE_UPLOAD_REQUEST_BYTES = max(
+    MAX_WORKSPACE_TOTAL_SIZE_BYTES,
+    MAX_WORKSPACE_ARCHIVE_SIZE_BYTES,
+) + 256 * 1024
 
 
 class _RequestBodyTooLarge(Exception):
@@ -23,7 +29,10 @@ class WorkspaceUploadBodyLimitMiddleware:
         self.app = app
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        if scope["type"] != "http" or scope.get("path") != "/workspaces":
+        if scope["type"] != "http" or scope.get("path") not in {
+            "/workspaces",
+            "/workspaces/archive",
+        }:
             await self.app(scope, receive, send)
             return
 

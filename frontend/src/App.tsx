@@ -1,6 +1,6 @@
 import { useEffect, useReducer, useState } from "react";
 
-import { answerQuestion, connectTaskEvents, createTask, decidePermission, deleteStagedFile, getTask, listTaskFiles, sendTaskMessage, stageTaskFiles, uploadWorkspace } from "./api";
+import { answerQuestion, connectTaskEvents, createTask, decidePermission, deleteStagedFile, getTask, listTasks, listTaskFiles, sendTaskMessage, stageTaskFiles, uploadWorkspace, uploadWorkspaceArchive } from "./api";
 import { PermissionPrompt } from "./components/PermissionPrompt";
 import { StatusHeader } from "./components/StatusHeader";
 import { UserPrompt } from "./components/UserPrompt";
@@ -8,7 +8,8 @@ import { WorkspaceForm } from "./components/WorkspaceForm";
 import { MessageComposer } from "./components/MessageComposer";
 import { ProjectFilesDrawer } from "./components/ProjectFilesDrawer";
 import { ConversationFeed } from "./components/ConversationFeed";
-import type { PublicActionState, PublicTaskMessage, TaskFile } from "./types";
+import { TaskHistoryDrawer } from "./components/TaskHistoryDrawer";
+import type { PublicActionState, PublicTaskMessage, TaskFile, TaskSummary } from "./types";
 import { hydrateTaskUiState, initialTaskUiState, taskStateReducer } from "./taskState";
 
 function taskIdFromUrl(): string | null {
@@ -28,17 +29,24 @@ export function App() {
   const [actions, setActions] = useState<PublicActionState[]>([]);
   const [files, setFiles] = useState<TaskFile[]>([]);
   const [filesOpen, setFilesOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [historyTasks, setHistoryTasks] = useState<TaskSummary[]>([]);
+
+  async function loadTask(taskId: string) {
+    const task = await getTask(taskId);
+    setTaskMeta({ id: task.task_id, request: task.original_request });
+    setMessages(task.messages ?? []);
+    setActions(task.actions);
+    dispatch({ type: "task.snapshot", state: hydrateTaskUiState(task) });
+    setFiles(await listTaskFiles(task.task_id));
+  }
+
   useEffect(() => {
     const taskId = taskIdFromUrl();
     if (!taskId) return;
-    getTask(taskId)
-      .then((task) => {
-        setTaskMeta({ id: task.task_id, request: task.original_request });
-        setMessages(task.messages ?? []);
-        setActions(task.actions);
-        dispatch({ type: "task.snapshot", state: hydrateTaskUiState(task) });
-        return listTaskFiles(task.task_id).then(setFiles);
-      })
+    loadTask(taskId)
       .catch((error: unknown) => setPageError(error instanceof Error ? error.message : "无法恢复任务"))
       .finally(() => setRestoring(false));
     // 首次加载 URL 时恢复一次；后续状态由 SSE 和用户 POST 驱动。
@@ -64,13 +72,42 @@ export function App() {
   }, [taskMeta, taskState.status]);
 
   async function start(files: File[], request: string) {
-    const workspace = await uploadWorkspace(files);
+    const workspace = files.length === 1 && files[0].name.toLowerCase().endsWith(".zip")
+      ? await uploadWorkspaceArchive(files[0])
+      : await uploadWorkspace(files);
     const created = await createTask(request, workspace.workspace_id);
     window.history.replaceState({}, "", `/?task=${encodeURIComponent(created.task_id)}`);
     setTaskMeta({ id: created.task_id, request: created.original_request });
     setActions([]);
     setFiles(await listTaskFiles(created.task_id));
     setPageError(null);
+  }
+
+  async function openHistory() {
+    setHistoryOpen(true);
+    setHistoryLoading(true);
+    setHistoryError(null);
+    try {
+      setHistoryTasks(await listTasks());
+    } catch (error) {
+      setHistoryError(error instanceof Error ? error.message : "无法读取历史任务");
+    } finally {
+      setHistoryLoading(false);
+    }
+  }
+
+  async function selectHistoryTask(taskId: string) {
+    setHistoryOpen(false);
+    setRestoring(true);
+    setPageError(null);
+    window.history.replaceState({}, "", `/?task=${encodeURIComponent(taskId)}`);
+    try {
+      await loadTask(taskId);
+    } catch (error) {
+      setPageError(error instanceof Error ? error.message : "无法恢复任务");
+    } finally {
+      setRestoring(false);
+    }
   }
 
   async function submitAnswer(rawResponse: string, selectedOption: string | null) {
@@ -152,7 +189,11 @@ export function App() {
 
   if (restoring) return <main className="loading-page" aria-busy="true"><p>正在从 SQLite 恢复任务…</p></main>;
   if (!taskMeta) {
-    return <main className="launch-shell"><nav className="brand-bar"><strong>ForgeMind</strong><span>Agent Runtime Workbench</span></nav><WorkspaceForm onStart={start} /></main>;
+    return <main className="launch-shell">
+      <nav className="brand-bar"><strong>ForgeMind</strong><span>Agent Runtime Workbench</span><button className="secondary-button compact-button" type="button" onClick={openHistory}>历史任务</button></nav>
+      <WorkspaceForm onStart={start} />
+      <TaskHistoryDrawer open={historyOpen} tasks={historyTasks} loading={historyLoading} error={historyError} onClose={() => setHistoryOpen(false)} onSelect={selectHistoryTask} />
+    </main>;
   }
 
   return (
@@ -160,6 +201,7 @@ export function App() {
       <nav className="app-topbar" aria-label="ForgeMind 任务工具栏">
         <div className="brand-lockup"><span className="brand-mark" aria-hidden="true">F</span><strong>ForgeMind</strong></div>
         <div className="topbar-actions">
+          <button className="secondary-button compact-button" type="button" onClick={openHistory}>历史任务</button>
           <button
             className="files-trigger"
             type="button"
@@ -185,7 +227,8 @@ export function App() {
         </div>
       </div>
       {!taskState.pendingQuestion && <MessageComposer busy={interactionBusy} running={taskState.status === "running"} onSend={submitMessage} />}
-      <ProjectFilesDrawer open={filesOpen} files={files} onClose={() => setFilesOpen(false)} onDeleteStaged={removeStagedFile} />
+      <ProjectFilesDrawer taskId={taskMeta.id} open={filesOpen} files={files} onClose={() => setFilesOpen(false)} onDeleteStaged={removeStagedFile} />
+      <TaskHistoryDrawer open={historyOpen} tasks={historyTasks} loading={historyLoading} error={historyError} onClose={() => setHistoryOpen(false)} onSelect={selectHistoryTask} />
     </main>
   );
 }

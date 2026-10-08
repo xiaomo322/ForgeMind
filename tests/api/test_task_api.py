@@ -1,7 +1,9 @@
 """观察前端通过 FastAPI 创建 ForgeMind 任务的完整过程。"""
 
+from io import BytesIO
 from pathlib import Path
 import sqlite3
+from zipfile import ZipFile
 
 from fastapi.testclient import TestClient
 
@@ -132,3 +134,94 @@ def test_post_tasks_rejects_unknown_workspace_without_creating_task(
     assert response.status_code == 404
     assert stored_task_count == 0
     assert "project_root" not in response.text
+
+
+def test_get_tasks_lists_persisted_tasks_newest_first_after_restart(
+    tmp_path: Path,
+) -> None:
+    database_path = tmp_path / "state.db"
+    workspace_root = tmp_path / "workspaces"
+    first_application = ForgeMindApplication(
+        state=SQLiteForgeMindState.open(database_path),
+        model=ModelThatMustNotRun(),
+    )
+    first_store = FileSystemWorkspaceStore(workspace_root)
+    first_workspace = first_store.create([WorkspaceUpload("first.py", b"pass\n")])
+    second_workspace = first_store.create([WorkspaceUpload("second.py", b"pass\n")])
+    first_client = TestClient(create_agent_stream_app(first_application, first_store))
+    first = first_client.post(
+        "/tasks",
+        json={"original_request": "第一个任务", "workspace_id": first_workspace.workspace_id},
+    ).json()
+    second = first_client.post(
+        "/tasks",
+        json={"original_request": "第二个任务", "workspace_id": second_workspace.workspace_id},
+    ).json()
+
+    restarted_application = ForgeMindApplication(
+        state=SQLiteForgeMindState.open(database_path),
+        model=ModelThatMustNotRun(),
+    )
+    restarted_store = FileSystemWorkspaceStore(workspace_root)
+    response = TestClient(
+        create_agent_stream_app(restarted_application, restarted_store)
+    ).get("/tasks?limit=10")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "tasks": [
+            {
+                "task_id": second["task_id"],
+                "original_request": "第二个任务",
+                "workspace_id": second_workspace.workspace_id,
+                "status": "running",
+                "revision": 1,
+            },
+            {
+                "task_id": first["task_id"],
+                "original_request": "第一个任务",
+                "workspace_id": first_workspace.workspace_id,
+                "status": "running",
+                "revision": 1,
+            },
+        ]
+    }
+
+
+def test_get_task_workspace_zip_downloads_current_project(tmp_path: Path) -> None:
+    application = ForgeMindApplication(
+        state=SQLiteForgeMindState.open(tmp_path / "state.db"),
+        model=ModelThatMustNotRun(),
+    )
+    store = FileSystemWorkspaceStore(tmp_path / "workspaces")
+    workspace = store.create_from_zip(
+        _project_zip({"src/main.py": b"value = 1\n", "README.md": b"# Demo\n"})
+    )
+    client = TestClient(create_agent_stream_app(application, store))
+    task = client.post(
+        "/tasks",
+        json={"original_request": "检查项目", "workspace_id": workspace.workspace_id},
+    ).json()
+
+    files_response = client.get(f"/tasks/{task['task_id']}/files")
+    assert [item["path"] for item in files_response.json()["files"]] == [
+        "README.md",
+        "src/main.py",
+    ]
+
+    response = client.get(f"/tasks/{task['task_id']}/workspace.zip")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/zip"
+    assert "attachment" in response.headers["content-disposition"]
+    with ZipFile(BytesIO(response.content)) as archive:
+        assert sorted(archive.namelist()) == ["README.md", "src/main.py"]
+        assert archive.read("src/main.py") == b"value = 1\n"
+
+
+def _project_zip(files: dict[str, bytes]) -> bytes:
+    output = BytesIO()
+    with ZipFile(output, "w") as archive:
+        for name, content in files.items():
+            archive.writestr(name, content)
+    return output.getvalue()

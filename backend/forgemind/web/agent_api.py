@@ -5,12 +5,13 @@ from typing import Literal
 from uuid import uuid4
 from pathlib import Path
 from hashlib import sha256
+import re
 from _thread import LockType
 from threading import Lock
 
 from fastapi import FastAPI, File, HTTPException, Query, UploadFile
 from fastapi import status as http_status
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from pydantic import Field, field_validator, model_validator
 
 from forgemind.application import ForgeMindApplication
@@ -34,6 +35,8 @@ from forgemind.web.request_limits import WorkspaceUploadBodyLimitMiddleware
 from forgemind.web.workspaces import (
     DuplicateWorkspaceFilenameError,
     FileSystemWorkspaceStore,
+    InvalidWorkspaceArchiveError,
+    MAX_WORKSPACE_ARCHIVE_SIZE_BYTES,
     MAX_WORKSPACE_FILE_COUNT,
     MAX_WORKSPACE_FILE_SIZE_BYTES,
     TooManyWorkspaceFilesError,
@@ -73,6 +76,20 @@ class CreatedTaskResponse(StrictContractModel):
     workspace_id: str = Field(min_length=1)
     status: Literal["running"]
     revision: int = Field(ge=1)
+
+
+class TaskSummary(StrictContractModel):
+    """历史任务抽屉需要的最小公开信息。"""
+
+    task_id: str = Field(min_length=1)
+    original_request: str = Field(min_length=1)
+    workspace_id: str | None
+    status: str = Field(min_length=1)
+    revision: int = Field(ge=1)
+
+
+class TaskListResponse(StrictContractModel):
+    tasks: tuple[TaskSummary, ...]
 
 
 class AnswerQuestionRequest(StrictContractModel):
@@ -209,6 +226,39 @@ def create_agent_stream_app(
             raise HTTPException(status_code=422, detail=str(error)) from error
 
     @app.post(
+        "/workspaces/archive",
+        response_model=UploadedWorkspace,
+        status_code=http_status.HTTP_201_CREATED,
+    )
+    async def upload_workspace_archive(
+        archive: Annotated[UploadFile, File()],
+    ) -> UploadedWorkspace:
+        """把一个 ZIP 项目安全解压为新的独立工作区。"""
+
+        if workspace_store is None:
+            raise HTTPException(status_code=503, detail="workspace uploads are unavailable")
+        if not (archive.filename or "").lower().endswith(".zip"):
+            raise HTTPException(status_code=415, detail="only .zip archives are supported")
+        try:
+            content = await archive.read(MAX_WORKSPACE_ARCHIVE_SIZE_BYTES + 1)
+        finally:
+            await archive.close()
+        try:
+            return workspace_store.create_from_zip(content)
+        except DuplicateWorkspaceFilenameError as error:
+            raise HTTPException(status_code=409, detail=str(error)) from error
+        except (
+            WorkspaceFileTooLargeError,
+            WorkspaceUploadTooLargeError,
+            TooManyWorkspaceFilesError,
+        ) as error:
+            raise HTTPException(status_code=413, detail=str(error)) from error
+        except InvalidWorkspaceArchiveError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
+        except WorkspaceUploadError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
+
+    @app.post(
         "/tasks",
         response_model=CreatedTaskResponse,
         status_code=http_status.HTTP_201_CREATED,
@@ -241,6 +291,33 @@ def create_agent_stream_app(
             status=task_view.current_status.status.value,
             revision=task_view.current_status.revision,
         )
+
+    @app.get("/tasks", response_model=TaskListResponse)
+    def list_tasks(
+        limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    ) -> TaskListResponse:
+        """从 SQLite 返回最近任务，使页面刷新或新建后仍能找回。"""
+
+        summaries: list[TaskSummary] = []
+        for view in application.list_recent_tasks(limit):
+            workspace_id: str | None = None
+            if workspace_store is not None:
+                candidate = Path(view.task.project_root).name
+                try:
+                    if workspace_store.resolve(candidate) == Path(view.task.project_root).resolve():
+                        workspace_id = candidate
+                except UnknownWorkspaceError:
+                    pass
+            summaries.append(
+                TaskSummary(
+                    task_id=view.task.task_id,
+                    original_request=view.task.original_request,
+                    workspace_id=workspace_id,
+                    status=view.current_status.status.value,
+                    revision=view.current_status.revision,
+                )
+            )
+        return TaskListResponse(tasks=tuple(summaries))
 
     @app.get("/tasks/{task_id}/events")
     def stream_task_events(
@@ -286,6 +363,30 @@ def create_agent_stream_app(
         except KeyError as error:
             raise HTTPException(status_code=404, detail="task not found") from error
         return build_public_task_state(view)
+
+    @app.get("/tasks/{task_id}/workspace.zip")
+    def download_task_workspace(task_id: str) -> Response:
+        """下载任务当前活动工作区，暂存附件不会混入导出内容。"""
+
+        if workspace_store is None:
+            raise HTTPException(status_code=503, detail="workspace store is unavailable")
+        try:
+            task = application.get_task(task_id).task
+            content = workspace_store.build_zip(Path(task.project_root))
+        except KeyError as error:
+            raise HTTPException(status_code=404, detail="task not found") from error
+        except UnknownWorkspaceError as error:
+            raise HTTPException(status_code=404, detail="workspace not found") from error
+        safe_task_id = re.sub(r"[^A-Za-z0-9_.-]", "_", task_id)
+        return Response(
+            content=content,
+            media_type="application/zip",
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="forgemind-{safe_task_id}.zip"'
+                )
+            },
+        )
 
     @app.post(
         "/tasks/{task_id}/permissions/{permission_request_id}",
@@ -436,10 +537,12 @@ def create_agent_stream_app(
             raise HTTPException(status_code=404, detail="task not found") from error
         root = Path(task.project_root)
         active = []
-        for path in sorted(root.glob("*.py"), key=lambda item: item.name.casefold()):
+        for path in sorted(root.rglob("*"), key=lambda item: item.as_posix().casefold()):
+            if path.is_symlink() or not path.is_file():
+                continue
             content = path.read_bytes()
             active.append({
-                "path": path.name,
+                "path": path.relative_to(root).as_posix(),
                 "size_bytes": len(content),
                 "sha256": sha256(content).hexdigest(),
                 "state": "active",

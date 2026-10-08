@@ -5,12 +5,16 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 from hashlib import sha256
+from io import BytesIO
 from pathlib import Path
+from pathlib import PurePosixPath
 import re
 import shutil
+import stat
 from tempfile import mkdtemp
 from typing import Sequence
 from uuid import uuid4
+from zipfile import BadZipFile, ZIP_DEFLATED, ZipFile, ZipInfo
 
 from pydantic import Field
 
@@ -20,6 +24,10 @@ from forgemind.schema.base import StrictContractModel
 MAX_WORKSPACE_FILE_COUNT = 20
 MAX_WORKSPACE_FILE_SIZE_BYTES = 1024 * 1024
 MAX_WORKSPACE_TOTAL_SIZE_BYTES = 5 * 1024 * 1024
+MAX_WORKSPACE_ARCHIVE_SIZE_BYTES = 10 * 1024 * 1024
+MAX_ARCHIVE_FILE_COUNT = 200
+MAX_ARCHIVE_FILE_SIZE_BYTES = 10 * 1024 * 1024
+MAX_ARCHIVE_EXPANDED_SIZE_BYTES = 20 * 1024 * 1024
 _WORKSPACE_ID_PATTERN = re.compile(
     r"^workspace_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
 )
@@ -58,6 +66,10 @@ class WorkspaceFileTooLargeError(WorkspaceUploadError):
 
 
 class WorkspaceUploadTooLargeError(WorkspaceUploadError):
+    pass
+
+
+class InvalidWorkspaceArchiveError(WorkspaceUploadError):
     pass
 
 
@@ -149,6 +161,119 @@ class FileSystemWorkspaceStore:
             file_count=len(files),
             total_size_bytes=sum(file.size_bytes for file in files),
         )
+
+    def create_from_zip(self, archive_content: bytes) -> UploadedWorkspace:
+        """校验并解压一个完整项目 ZIP，再原子发布为独立工作区。"""
+
+        if len(archive_content) > MAX_WORKSPACE_ARCHIVE_SIZE_BYTES:
+            raise WorkspaceUploadTooLargeError(
+                f"archive exceeds {MAX_WORKSPACE_ARCHIVE_SIZE_BYTES} bytes"
+            )
+        try:
+            archive = ZipFile(BytesIO(archive_content))
+        except BadZipFile as error:
+            raise InvalidWorkspaceArchiveError("file is not a valid ZIP archive") from error
+
+        with archive:
+            entries = self._validate_archive_entries(archive.infolist())
+            workspace_id = f"workspace_{uuid4()}"
+            final_root = self._storage_root / workspace_id
+            temporary_root = Path(mkdtemp(prefix=".upload-", dir=self._storage_root))
+            try:
+                for info, relative_path in entries:
+                    content = archive.read(info)
+                    if len(content) != info.file_size:
+                        raise InvalidWorkspaceArchiveError(
+                            f"archive entry size changed: {info.filename}"
+                        )
+                    destination = temporary_root.joinpath(*relative_path.parts)
+                    destination.parent.mkdir(parents=True, exist_ok=True)
+                    destination.write_bytes(content)
+                temporary_root.replace(final_root)
+            except Exception:
+                shutil.rmtree(temporary_root, ignore_errors=True)
+                raise
+
+        files = tuple(
+            UploadedFileInfo(path=path.as_posix(), size_bytes=info.file_size)
+            for info, path in sorted(entries, key=lambda item: item[1].as_posix())
+        )
+        return UploadedWorkspace(
+            workspace_id=workspace_id,
+            files=files,
+            file_count=len(files),
+            total_size_bytes=sum(item.size_bytes for item in files),
+        )
+
+    def build_zip(self, project_root: Path) -> bytes:
+        """把 Store 管理的活动工作区打包为可下载 ZIP。"""
+
+        root = project_root.resolve()
+        if root.parent != self._storage_root or not root.is_dir():
+            raise UnknownWorkspaceError(str(project_root))
+
+        output = BytesIO()
+        with ZipFile(output, "w", ZIP_DEFLATED) as archive:
+            for path in sorted(root.rglob("*"), key=lambda item: item.as_posix().casefold()):
+                if path.is_symlink() or not path.is_file():
+                    continue
+                archive.writestr(path.relative_to(root).as_posix(), path.read_bytes())
+        return output.getvalue()
+
+    @staticmethod
+    def _validate_archive_entries(
+        infos: Sequence[ZipInfo],
+    ) -> tuple[tuple[ZipInfo, PurePosixPath], ...]:
+        """先验证全部 ZIP 条目，避免解压一半后才发现越界。"""
+
+        entries: list[tuple[ZipInfo, PurePosixPath]] = []
+        seen_paths: set[str] = set()
+        total_size = 0
+        for info in infos:
+            if info.is_dir():
+                continue
+            name = info.filename
+            relative_path = PurePosixPath(name)
+            unix_mode = info.external_attr >> 16
+            if (
+                not name
+                or "\\" in name
+                or name.startswith("/")
+                or re.match(r"^[A-Za-z]:", name)
+                or any(part in {"", ".", ".."} for part in relative_path.parts)
+                or stat.S_ISLNK(unix_mode)
+            ):
+                raise InvalidWorkspaceFilenameError(
+                    f"unsafe archive path: {name}"
+                )
+            if info.flag_bits & 0x1:
+                raise InvalidWorkspaceArchiveError(
+                    f"encrypted archive entry is not supported: {name}"
+                )
+            normalized = relative_path.as_posix().casefold()
+            if normalized in seen_paths:
+                raise DuplicateWorkspaceFilenameError(
+                    f"duplicate archive path: {name}"
+                )
+            seen_paths.add(normalized)
+            if info.file_size > MAX_ARCHIVE_FILE_SIZE_BYTES:
+                raise WorkspaceFileTooLargeError(
+                    f"file exceeds {MAX_ARCHIVE_FILE_SIZE_BYTES} bytes"
+                )
+            total_size += info.file_size
+            if total_size > MAX_ARCHIVE_EXPANDED_SIZE_BYTES:
+                raise WorkspaceUploadTooLargeError(
+                    f"expanded archive exceeds {MAX_ARCHIVE_EXPANDED_SIZE_BYTES} bytes"
+                )
+            entries.append((info, relative_path))
+
+        if not entries:
+            raise EmptyWorkspaceUploadError("ZIP archive must contain at least one file")
+        if len(entries) > MAX_ARCHIVE_FILE_COUNT:
+            raise TooManyWorkspaceFilesError(
+                f"archive may contain at most {MAX_ARCHIVE_FILE_COUNT} files"
+            )
+        return tuple(entries)
 
     def stage(
         self,
