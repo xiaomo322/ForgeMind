@@ -95,7 +95,7 @@ def test_application_stops_on_parse_failure_without_inventing_action(
     tmp_path: Path,
 ) -> None:
     state = SQLiteForgeMindState.open(tmp_path / "state.db")
-    app = ForgeMindApplication(state=state, model=SequenceModel(["not json"]))
+    app = ForgeMindApplication(state=state, model=SequenceModel(["not json", "still not json"]))
     task = app.create_task(
         "分析项目",
         tmp_path,
@@ -108,6 +108,55 @@ def test_application_stops_on_parse_failure_without_inventing_action(
     assert result.status is TaskStatus.RUNNING
     assert result.parse_failure is not None
     assert state.get_task_view(task.task_id).actions == ()
+
+
+def test_application_can_complete_again_after_applied_follow_up_message(
+    tmp_path: Path,
+) -> None:
+    """上一轮的 complete 不应阻塞后续消息所属的新一轮完成。"""
+
+    model = SequenceModel(
+        [
+            _json(
+                {
+                    "action_type": "complete",
+                    "reason": "第一轮已经回答",
+                    "summary": "第一轮完成",
+                }
+            ),
+            _json(
+                {
+                    "action_type": "complete",
+                    "reason": "第二轮已经回答",
+                    "summary": "第二轮完成",
+                }
+            ),
+        ]
+    )
+    state = SQLiteForgeMindState.open(tmp_path / "state.db")
+    app = ForgeMindApplication(state=state, model=model)
+    task = app.create_task(
+        "第一个问题",
+        tmp_path,
+        next_task_id=lambda: "task-001",
+        next_task_status_id=lambda: "status-001",
+    )
+
+    first_result = app.run_until_pause(task.task_id)
+    message = app.send_message(task.task_id, "第二个问题")
+    second_result = app.run_until_pause(task.task_id)
+
+    view = app.get_task(task.task_id)
+    message_view = state.list_message_views(task.task_id)[0]
+    assert first_result.status is TaskStatus.COMPLETED
+    assert second_result.status is TaskStatus.COMPLETED
+    assert [item.action.summary for item in view.actions] == [
+        "第一轮完成",
+        "第二轮完成",
+    ]
+    assert message_view.message == message
+    assert message_view.application is not None
+    assert message_view.application.applied_after_action_sequence == 1
 
 
 def test_application_records_unknown_result_instead_of_replaying_command(

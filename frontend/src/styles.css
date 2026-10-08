@@ -145,6 +145,27 @@ pre { max-width: 100%; margin: var(--space-sm) 0 0; padding: var(--space-md); ov
 .task-header h1 { max-width: 42rem; margin: 0.6rem 0 0.4rem; font-size: clamp(1.65rem, 3vw, 2.35rem); letter-spacing: -0.025em; }
 .task-header code { opacity: 0.7; }
 .conversation-column { width: min(64rem, calc(100% - 2rem)); }
+.conversation-feed { display: grid; gap: 2.25rem; margin: 1.5rem 0; }
+.conversation-round { display: grid; gap: 0.9rem; }
+.chat-row { display: flex; align-items: flex-start; gap: 0.75rem; min-width: 0; }
+.chat-row--user { justify-content: flex-end; }
+.chat-bubble { min-width: 0; border: 1px solid var(--color-rule); border-radius: 0.85rem; }
+.chat-bubble--user { width: fit-content; max-width: min(75%, 46rem); padding: 0.8rem 1rem; background: #24301f; }
+.chat-bubble--user > p { margin: 0; line-height: 1.65; white-space: pre-wrap; overflow-wrap: anywhere; }
+.chat-bubble--assistant { flex: 1; max-width: calc(100% - 3rem); overflow: hidden; background: #171b18; }
+.chat-bubble--assistant > header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.8rem 1rem; border-bottom: 1px solid var(--color-rule); }
+.chat-bubble--assistant > header strong { font-size: 0.9rem; }
+.chat-bubble--assistant > header span { color: var(--color-ink-soft); font-size: 0.75rem; }
+.assistant-avatar { background: #2c332d; color: var(--color-ink); }
+.assistant-answer { padding: 1rem 1.1rem 1.15rem; }
+.assistant-answer p { max-width: 76ch; margin: 0 0 0.85rem; color: var(--color-ink); font-size: 0.98rem; line-height: 1.8; white-space: pre-wrap; overflow-wrap: anywhere; }
+.assistant-answer p:last-child { margin-bottom: 0; }
+.assistant-waiting { display: flex; align-items: center; gap: 0.6rem; margin: 0; padding: 1rem; color: var(--color-ink-soft); font-size: 0.88rem; }
+.chat-bubble--assistant .timeline-panel { border-width: 0 0 1px; border-radius: 0; background: #151917; }
+.chat-bubble--assistant .section-heading { padding: 0.8rem 1rem; }
+.chat-bubble--assistant .section-heading h2 { font-size: 0.95rem; }
+.chat-bubble--assistant .section-heading .machine-label { display: none; }
+.chat-bubble--assistant .timeline-item { padding-inline: 1rem; }
 .conversation-messages { margin: 1.5rem 0 1.25rem; }
 .conversation-message { grid-template-columns: 2.25rem minmax(0, 1fr); }
 .conversation-message > div { max-width: 48rem; border-color: var(--color-rule); background: #202520; color: var(--color-ink); }
@@ -202,6 +223,8 @@ pre { max-width: 100%; margin: var(--space-sm) 0 0; padding: var(--space-md); ov
   .task-header { width: min(100% - 1.5rem, 42rem); padding-top: 1.5rem; }
   .task-header code { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
   .conversation-column { width: min(100% - 1.5rem, 42rem); }
+  .chat-bubble--user { max-width: 86%; }
+  .chat-bubble--assistant { max-width: calc(100% - 2.6rem); }
   .timeline-item { grid-template-columns: 1.5rem minmax(0, 1fr); padding-inline: 0.85rem; }
   .timeline-meta { align-items: flex-start; }
   .message-composer { width: calc(100% - 1rem); bottom: 0.5rem; }

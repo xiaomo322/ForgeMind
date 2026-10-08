@@ -231,7 +231,7 @@ def test_parse_failure_stops_browser_reconnect_until_user_retries(
 ) -> None:
     """模型输出不合法时要显式失败，避免 EventSource 无限自动重连。"""
 
-    model = SequenceModel(responses=["not json"])
+    model = SequenceModel(responses=["not json", "still not json"])
     application = ForgeMindApplication(
         state=SQLiteForgeMindState.open(tmp_path / "state.db"),
         model=model,
@@ -246,7 +246,7 @@ def test_parse_failure_stops_browser_reconnect_until_user_retries(
         "message": "模型输出不符合决策协议，请检查记录后重试。",
     }
     assert application.get_task(task.task_id).current_status.status is TaskStatus.RUNNING
-    assert len(model.received_inputs) == 1
+    assert len(model.received_inputs) == 2
 
 
 def test_agent_stream_route_sends_real_steps_as_sse(tmp_path: Path) -> None:

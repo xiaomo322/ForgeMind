@@ -141,4 +141,40 @@ describe("taskStateReducer", () => {
     expect(state.pendingQuestion).toBeNull();
     expect(state.pendingPermission).toBeNull();
   });
+
+  it("does not expose an old completion as the current result after a follow-up resumes the task", () => {
+    const task: PublicTaskState = {
+      task_id: "task-follow-up",
+      original_request: "先分析文件",
+      status: "running",
+      revision: 4,
+      actions: [
+        {
+          sequence: 1,
+          action: {
+            action_id: "complete-1",
+            action_type: "complete",
+            reason: "第一轮完成",
+            summary: "第一轮回答",
+          },
+          user_response: null,
+          permission_request: null,
+          permission_decision: null,
+          observation: null,
+        },
+      ],
+      messages: [
+        {
+          message_id: "message-1",
+          sequence: 1,
+          content: "继续解释",
+          delivery: "applied",
+          applied_after_action_sequence: 1,
+          attachments: [],
+        },
+      ],
+    };
+
+    expect(hydrateTaskUiState(task).summary).toBeNull();
+  });
 });

@@ -3,13 +3,12 @@ import { useEffect, useReducer, useState } from "react";
 import { answerQuestion, connectTaskEvents, createTask, decidePermission, deleteStagedFile, getTask, listTaskFiles, sendTaskMessage, stageTaskFiles, uploadWorkspace } from "./api";
 import { PermissionPrompt } from "./components/PermissionPrompt";
 import { StatusHeader } from "./components/StatusHeader";
-import { TaskTimeline } from "./components/TaskTimeline";
 import { UserPrompt } from "./components/UserPrompt";
 import { WorkspaceForm } from "./components/WorkspaceForm";
 import { MessageComposer } from "./components/MessageComposer";
 import { ProjectFilesDrawer } from "./components/ProjectFilesDrawer";
-import { ConversationMessages } from "./components/ConversationMessages";
-import type { PublicTaskMessage, TaskFile } from "./types";
+import { ConversationFeed } from "./components/ConversationFeed";
+import type { PublicActionState, PublicTaskMessage, TaskFile } from "./types";
 import { hydrateTaskUiState, initialTaskUiState, taskStateReducer } from "./taskState";
 
 function taskIdFromUrl(): string | null {
@@ -26,6 +25,7 @@ export function App() {
   const [interactionBusy, setInteractionBusy] = useState(false);
   const [pageError, setPageError] = useState<string | null>(null);
   const [messages, setMessages] = useState<PublicTaskMessage[]>([]);
+  const [actions, setActions] = useState<PublicActionState[]>([]);
   const [files, setFiles] = useState<TaskFile[]>([]);
   const [filesOpen, setFilesOpen] = useState(false);
   useEffect(() => {
@@ -35,6 +35,7 @@ export function App() {
       .then((task) => {
         setTaskMeta({ id: task.task_id, request: task.original_request });
         setMessages(task.messages ?? []);
+        setActions(task.actions);
         dispatch({ type: "task.snapshot", state: hydrateTaskUiState(task) });
         return listTaskFiles(task.task_id).then(setFiles);
       })
@@ -49,7 +50,10 @@ export function App() {
     return connectTaskEvents(taskMeta.id, {
       onEvent: (event) => {
         dispatch(event);
-        getTask(taskMeta.id).then((task) => setMessages(task.messages ?? [])).catch(() => undefined);
+        getTask(taskMeta.id).then((task) => {
+          setMessages(task.messages ?? []);
+          setActions(task.actions);
+        }).catch(() => undefined);
         listTaskFiles(taskMeta.id).then(setFiles).catch(() => undefined);
       },
       onConnectionError: () => dispatch({
@@ -64,6 +68,7 @@ export function App() {
     const created = await createTask(request, workspace.workspace_id);
     window.history.replaceState({}, "", `/?task=${encodeURIComponent(created.task_id)}`);
     setTaskMeta({ id: created.task_id, request: created.original_request });
+    setActions([]);
     setFiles(await listTaskFiles(created.task_id));
     setPageError(null);
   }
@@ -75,6 +80,8 @@ export function App() {
       await answerQuestion(taskMeta.id, taskState.pendingQuestion.question_action_id, rawResponse, selectedOption);
       // POST 先写 SQLite，再重新读取权威快照；因此已回答问题仍保留在时间线中。
       const task = await getTask(taskMeta.id);
+      setMessages(task.messages ?? []);
+      setActions(task.actions);
       dispatch({ type: "task.snapshot", state: hydrateTaskUiState(task) });
     } catch (error) {
       setPageError(error instanceof Error ? error.message : "回答提交失败");
@@ -93,6 +100,8 @@ export function App() {
         decision,
         `${decision === "approve" ? "批准" : "拒绝"}本次 ${taskState.pendingPermission.tool_name} 操作`,
       );
+      setMessages(task.messages ?? []);
+      setActions(task.actions);
       dispatch({ type: "task.snapshot", state: hydrateTaskUiState(task) });
     } catch (error) {
       setPageError(error instanceof Error ? error.message : "权限决定提交失败");
@@ -110,6 +119,7 @@ export function App() {
       await sendTaskMessage(taskMeta.id, content, staged.map((item) => item.upload_id));
       const task = await getTask(taskMeta.id);
       setMessages(task.messages ?? []);
+      setActions(task.actions);
       setFiles(await listTaskFiles(taskMeta.id));
       dispatch({ type: "task.snapshot", state: hydrateTaskUiState(task) });
     } catch (error) {
@@ -165,12 +175,10 @@ export function App() {
       <StatusHeader taskId={taskMeta.id} status={taskState.status} request={taskMeta.request} />
       {pageError && <p className="page-error" role="alert">{pageError}</p>}
       <div className="conversation-column">
-        <ConversationMessages originalRequest={taskMeta.request} messages={messages} />
-        <TaskTimeline timeline={taskState.timeline} />
+        <ConversationFeed originalRequest={taskMeta.request} messages={messages} actions={actions} />
         <div className="interaction-column conversation-interactions">
           {taskState.pendingQuestion && <UserPrompt prompt={taskState.pendingQuestion} disabled={interactionBusy} onSubmit={submitAnswer} />}
           {taskState.pendingPermission && <PermissionPrompt prompt={taskState.pendingPermission} disabled={interactionBusy} onDecision={submitPermission} />}
-          {taskState.summary && <aside className="completion-panel"><p className="machine-label">TASK COMPLETE</p><h2>任务完成</h2><p className="completion-summary">{taskState.summary}</p></aside>}
           {taskState.status === "paused" && <aside className="runtime-action-panel"><p className="machine-label">EXECUTION PAUSED</p><h2>本轮执行已暂停</h2><p>Agent 已用完本轮的执行步数。请先检查左侧记录，再决定是否继续下一批。</p><button className="primary-button" type="button" onClick={resumeTask}>继续运行</button></aside>}
           {taskState.status === "failed" && <aside className="runtime-action-panel runtime-action-panel--danger"><p className="machine-label">CONNECTION STOPPED</p><h2>本次执行未能继续</h2><p>{taskState.error}</p><button className="primary-button" type="button" onClick={resumeTask}>重试连接</button></aside>}
           {!taskState.pendingQuestion && !taskState.pendingPermission && !taskState.summary && taskState.status !== "paused" && taskState.status !== "failed" && <aside className="context-panel"><p className="machine-label">RUNTIME BOUNDARY</p><p>读取与搜索可直接执行；修改文件、运行命令和测试会在这里等待你的明确授权。</p></aside>}

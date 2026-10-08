@@ -445,29 +445,50 @@ class SQLiteForgeMindState:
 
                 latest_action = connection.execute(
                     """
-                    SELECT action_id, action_type FROM actions
+                    SELECT action_id, action_type, task_sequence FROM actions
                     WHERE task_id = ? ORDER BY task_sequence DESC LIMIT 1
                     """,
                     (action.task_id,),
                 ).fetchone()
                 if latest_action is not None:
-                    latest_action_id, latest_action_type = latest_action
-                    table = (
-                        "user_responses"
-                        if latest_action_type == "ask_user"
-                        else "observations"
+                    latest_action_id, latest_action_type, latest_sequence = (
+                        latest_action
                     )
-                    column = (
-                        "question_action_id"
-                        if latest_action_type == "ask_user"
-                        else "action_id"
+                    application_rows = connection.execute(
+                        """
+                        SELECT payload_json FROM task_message_applications
+                        WHERE task_id = ?
+                        """,
+                        (action.task_id,),
+                    ).fetchall()
+                    # 后续消息建立新的对话轮次。边界之前的最近 Action
+                    # 已经属于上一轮，不能被误判成本轮尚未结束的行动。
+                    applied_message_boundary = max(
+                        (
+                            TaskMessageApplicationRecord.model_validate_json(
+                                row[0]
+                            ).applied_after_action_sequence
+                            for row in application_rows
+                        ),
+                        default=0,
                     )
-                    terminal = connection.execute(
-                        f"SELECT 1 FROM {table} WHERE {column} = ?",
-                        (latest_action_id,),
-                    ).fetchone()
-                    if terminal is None:
-                        raise CompletionHasPendingActionError
+                    if latest_sequence > applied_message_boundary:
+                        table = (
+                            "user_responses"
+                            if latest_action_type == "ask_user"
+                            else "observations"
+                        )
+                        column = (
+                            "question_action_id"
+                            if latest_action_type == "ask_user"
+                            else "action_id"
+                        )
+                        terminal = connection.execute(
+                            f"SELECT 1 FROM {table} WHERE {column} = ?",
+                            (latest_action_id,),
+                        ).fetchone()
+                        if terminal is None:
+                            raise CompletionHasPendingActionError
 
                 sequence = connection.execute(
                     """

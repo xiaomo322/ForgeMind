@@ -1,5 +1,6 @@
 import type {
   PermissionRequiredData,
+  PublicActionState,
   PublicTaskState,
   TaskEvent,
   TaskStatus,
@@ -53,14 +54,12 @@ function stringOptions(value: unknown): string[] | null {
     : null;
 }
 
-export function hydrateTaskUiState(task: PublicTaskState): TaskUiState {
-  const state = initialTaskUiState(task.task_id);
-  state.status = task.status;
-
-  task.actions.forEach((item) => {
+export function timelineItemsFromActions(actions: PublicActionState[]): TimelineItem[] {
+  const timeline: TimelineItem[] = [];
+  actions.forEach((item) => {
     const action = item.action;
     const stepSequence = item.sequence * 2 - 1;
-    state.timeline.push({
+    timeline.push({
       kind: "step",
       sequence: stepSequence,
       data: {
@@ -76,12 +75,50 @@ export function hydrateTaskUiState(task: PublicTaskState): TaskUiState {
     });
 
     if (action.action_type === "complete") {
-      state.summary = text(action.summary);
-      state.timeline.push({
-        kind: "completion",
+      timeline.push({ kind: "completion", sequence: item.sequence * 2, summary: text(action.summary) });
+    }
+    if (action.action_type === "ask_user") {
+      timeline.push({
+        kind: "question",
         sequence: item.sequence * 2,
-        summary: state.summary,
+        data: {
+          question_action_id: text(action.action_id),
+          reason: text(action.reason),
+          question: text(action.question),
+          options: stringOptions(action.options),
+        },
+        response: item.user_response,
       });
+    }
+    if (item.permission_request !== null) {
+      const request = item.permission_request;
+      timeline.push({
+        kind: "permission",
+        sequence: item.sequence * 2,
+        data: {
+          permission_request_id: text(request.permission_request_id),
+          tool_name: text(request.tool_name),
+          reason: text(request.reason),
+          arguments: typeof request.arguments === "object" && request.arguments !== null
+            ? request.arguments as Record<string, unknown>
+            : {},
+        },
+        decision: item.permission_decision,
+      });
+    }
+  });
+  return timeline;
+}
+
+export function hydrateTaskUiState(task: PublicTaskState): TaskUiState {
+  const state = initialTaskUiState(task.task_id);
+  state.status = task.status;
+  state.timeline = timelineItemsFromActions(task.actions);
+
+  task.actions.forEach((item) => {
+    const action = item.action;
+    if (action.action_type === "complete" && task.status === "completed") {
+      state.summary = text(action.summary);
     }
     if (action.action_type === "ask_user") {
       const question: WaitingUserData = {
@@ -90,12 +127,6 @@ export function hydrateTaskUiState(task: PublicTaskState): TaskUiState {
         question: text(action.question),
         options: stringOptions(action.options),
       };
-      state.timeline.push({
-        kind: "question",
-        sequence: item.sequence * 2,
-        data: question,
-        response: item.user_response,
-      });
       if (item.user_response === null && task.status === "waiting_user") {
         state.pendingQuestion = question;
       }
@@ -111,12 +142,6 @@ export function hydrateTaskUiState(task: PublicTaskState): TaskUiState {
             ? (request.arguments as Record<string, unknown>)
             : {},
       };
-      state.timeline.push({
-        kind: "permission",
-        sequence: item.sequence * 2,
-        data: permission,
-        decision: item.permission_decision,
-      });
       if (item.permission_decision === null && task.status === "waiting_user") {
         state.pendingPermission = permission;
       }

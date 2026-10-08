@@ -61,13 +61,13 @@ function observationSummary(toolName: string, runtime: Record<string, unknown>):
   return status === "success" ? "执行成功" : "已记录执行结果";
 }
 
-export function TaskTimeline({ timeline }: { timeline: TimelineItem[] }) {
+export function TaskTimeline({ timeline, titleId = "timeline-title" }: { timeline: TimelineItem[]; titleId?: string }) {
   return (
-    <section className="timeline-panel" aria-labelledby="timeline-title" aria-live="polite">
+    <section className="timeline-panel" aria-labelledby={titleId} aria-live="polite">
       <div className="section-heading">
         <div>
           <p className="machine-label">LIVE TRACE</p>
-          <h2 id="timeline-title">执行时间线</h2>
+          <h2 id={titleId}>执行过程</h2>
         </div>
         <span>{timeline.length} 条事件</span>
       </div>

@@ -287,8 +287,67 @@ describe("ForgeMind App", () => {
     });
     render(<App />);
 
-    expect(await screen.findByRole("heading", { name: "任务完成" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: summary })).not.toBeInTheDocument();
-    expect(screen.getAllByText(summary).some((node) => node.tagName === "P")).toBe(true);
+    const answer = await screen.findByText(summary);
+    expect(answer.tagName).toBe("P");
+    expect(answer.closest(".chat-row--assistant")).toBeInTheDocument();
+  });
+
+  it("groups each follow-up with the ForgeMind answer produced after it", async () => {
+    window.history.replaceState({}, "", "/?task=task-conversation");
+    mockedGetTask.mockResolvedValue({
+      task_id: "task-conversation",
+      original_request: "第一个问题",
+      status: "completed",
+      revision: 5,
+      actions: [
+        {
+          sequence: 1,
+          action: { action_id: "complete-1", action_type: "complete", reason: "第一轮完成", summary: "第一个回答" },
+          user_response: null,
+          permission_request: null,
+          permission_decision: null,
+          observation: null,
+        },
+        {
+          sequence: 2,
+          action: { action_id: "complete-2", action_type: "complete", reason: "第二轮完成", summary: "第二个回答" },
+          user_response: null,
+          permission_request: null,
+          permission_decision: null,
+          observation: null,
+        },
+      ],
+      messages: [
+        {
+          message_id: "message-1",
+          sequence: 1,
+          content: "第二个问题",
+          delivery: "applied",
+          applied_after_action_sequence: 1,
+          attachments: [],
+        },
+        {
+          message_id: "message-2",
+          sequence: 2,
+          content: "第二个问题的补充",
+          delivery: "applied",
+          applied_after_action_sequence: 1,
+          attachments: [],
+        },
+      ],
+    });
+    render(<App />);
+
+    const firstRound = await screen.findByRole("region", { name: "对话第 1 轮" });
+    const secondRound = screen.getByRole("region", { name: "对话第 2 轮" });
+    expect(screen.getAllByRole("region", { name: /对话第 \d+ 轮/ })).toHaveLength(2);
+    expect(firstRound).toHaveTextContent("第一个问题");
+    expect(firstRound).toHaveTextContent("第一个回答");
+    expect(firstRound).not.toHaveTextContent("第二个回答");
+    expect(secondRound).toHaveTextContent("第二个问题");
+    expect(secondRound).toHaveTextContent("第二个问题的补充");
+    expect(secondRound).toHaveTextContent("第二个回答");
+    expect(secondRound).not.toHaveTextContent("第一个回答");
   });
 });

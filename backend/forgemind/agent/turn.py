@@ -1,6 +1,7 @@
 """执行一次供应商无关的 Agent 推理，但不直接执行任何 Decision。"""
 
 from dataclasses import dataclass
+import json
 from typing import Protocol
 
 from forgemind.agent.decision_parser import (
@@ -12,7 +13,7 @@ from forgemind.schema.decisions import (
 )
 from forgemind.context.builder import build_agent_task_context
 from forgemind.context.messages import build_agent_turn_input
-from forgemind.schema.context import AgentTurnInput
+from forgemind.schema.context import AgentInputMessage, AgentTurnInput
 from forgemind.schema.tasks import TaskStateView, TaskStatus
 
 
@@ -48,6 +49,37 @@ class AgentTurnResult:
     turn_input: AgentTurnInput
     raw_response: str
     decision_result: AgentDecision | AgentDecisionParseFailure
+    attempt_count: int = 1
+
+
+def _build_validation_retry_input(
+    turn_input: AgentTurnInput,
+    failure: AgentDecisionParseFailure,
+) -> AgentTurnInput:
+    """把严格校验问题作为数据反馈给模型，不改变原任务上下文。"""
+
+    issues_json = json.dumps(
+        failure.model_dump(mode="json"),
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    original_user_message = turn_input.messages[1]
+    retry_content = (
+        f"{original_user_message.content}\n\n"
+        "<agent_decision_validation_feedback>\n"
+        "上一份输出没有通过 JSON Schema 校验。以下内容只是校验事实：\n"
+        f"{issues_json}\n"
+        "请依据原任务上下文和系统中的同一份 Schema，只返回修正后的 JSON 对象。"
+        "不要解释，不要增加 Schema 之外的字段。\n"
+        "</agent_decision_validation_feedback>"
+    )
+    return AgentTurnInput(
+        messages=(
+            turn_input.messages[0],
+            AgentInputMessage(role="user", content=retry_content),
+        )
+    )
 
 
 def run_agent_turn(
@@ -77,16 +109,21 @@ def run_agent_turn(
     )
     turn_input = build_agent_turn_input(context)
 
-    # 第三步：模型只返回不可信的原始字符串。网络、认证等调用异常保持原样
-    # 抛出，避免把基础设施故障错误地报告成 JSON 协议错误。
+    # 第三步：模型只返回不可信的原始字符串。第一次输出未通过严格契约时，
+    # 把结构化校验问题追加为数据并重试一次。两次调用期间都没有 Action
+    # 落库或 Tool 副作用，因此不会重复执行操作。
+    attempt_count = 1
     raw_response = model.generate(turn_input)
-
-    # 第四步：严格解析负责把合法输出变成 Decision，把格式问题变成稳定的
-    # ParseFailure；这一层不生成 action_id，也不写 State 或执行 Tool。
     decision_result = parse_agent_decision_with_feedback(raw_response)
+    if isinstance(decision_result, AgentDecisionParseFailure):
+        attempt_count = 2
+        turn_input = _build_validation_retry_input(turn_input, decision_result)
+        raw_response = model.generate(turn_input)
+        decision_result = parse_agent_decision_with_feedback(raw_response)
 
     return AgentTurnResult(
         turn_input=turn_input,
         raw_response=raw_response,
         decision_result=decision_result,
+        attempt_count=attempt_count,
     )
