@@ -9,6 +9,7 @@ import {
   createTask,
   decidePermission,
   getTask,
+  listTaskFiles,
   uploadWorkspace,
 } from "./api";
 
@@ -17,7 +18,11 @@ vi.mock("./api", () => ({
   connectTaskEvents: vi.fn(() => vi.fn()),
   createTask: vi.fn(),
   decidePermission: vi.fn(),
+  deleteStagedFile: vi.fn(),
   getTask: vi.fn(),
+  listTaskFiles: vi.fn(),
+  sendTaskMessage: vi.fn(),
+  stageTaskFiles: vi.fn(),
   uploadWorkspace: vi.fn(),
 }));
 
@@ -27,10 +32,12 @@ const mockedGetTask = vi.mocked(getTask);
 const mockedAnswer = vi.mocked(answerQuestion);
 const mockedPermission = vi.mocked(decidePermission);
 const mockedConnect = vi.mocked(connectTaskEvents);
+const mockedListFiles = vi.mocked(listTaskFiles);
 
 beforeEach(() => {
   vi.resetAllMocks();
   mockedConnect.mockImplementation(() => vi.fn());
+  mockedListFiles.mockResolvedValue([]);
   window.history.replaceState({}, "", "/");
 });
 
@@ -70,7 +77,7 @@ describe("ForgeMind App", () => {
     await user.type(screen.getByLabelText("任务目标"), "检查价格计算");
     await user.click(screen.getByRole("button", { name: "启动 Agent" }));
 
-    expect(await screen.findByText("检查价格计算")).toBeInTheDocument();
+    expect((await screen.findAllByText("检查价格计算")).length).toBeGreaterThan(0);
     expect(screen.getByText("task-1")).toBeInTheDocument();
     expect(mockedUpload).toHaveBeenCalledTimes(1);
     expect(mockedCreate).toHaveBeenCalledWith("检查价格计算", "workspace-1");
@@ -211,7 +218,7 @@ describe("ForgeMind App", () => {
     const user = userEvent.setup();
     render(<App />);
 
-    expect(await screen.findByText("检查整个项目")).toBeInTheDocument();
+    expect((await screen.findAllByText("检查整个项目")).length).toBeGreaterThan(0);
     await waitFor(() => expect(mockedConnect).toHaveBeenCalledTimes(1));
 
     act(() => {

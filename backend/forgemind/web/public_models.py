@@ -28,6 +28,7 @@ class PublicTaskState(StrictContractModel):
     status: TaskStatus
     revision: int = Field(ge=1)
     actions: tuple[PublicActionState, ...]
+    messages: tuple[dict[str, Any], ...] = ()
 
 
 def build_public_task_state(view: TaskStateView) -> PublicTaskState:
@@ -67,4 +68,26 @@ def build_public_task_state(view: TaskStateView) -> PublicTaskState:
         status=view.current_status.status,
         revision=view.current_status.revision,
         actions=actions,
+        messages=tuple(
+            {
+                "message_id": item.message.message_id,
+                "sequence": item.message.sequence,
+                "content": item.message.content,
+                "delivery": "applied" if item.application else "queued",
+                "applied_after_action_sequence": (
+                    item.application.applied_after_action_sequence if item.application else None
+                ),
+                "attachments": [
+                    {
+                        "upload_id": attachment.upload_id,
+                        "path": attachment.path,
+                        "size_bytes": attachment.size_bytes,
+                        "sha256": attachment.sha256,
+                        "state": "active" if item.application else "staged",
+                    }
+                    for attachment in item.attachments
+                ],
+            }
+            for item in view.messages
+        ),
     )

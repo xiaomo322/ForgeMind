@@ -2,6 +2,9 @@ import type {
   PublicTaskState,
   TaskEvent,
   UploadedWorkspace,
+  StagedUpload,
+  TaskMessageAccepted,
+  TaskFile,
 } from "./types";
 
 interface CreatedTask {
@@ -75,6 +78,43 @@ export async function createTask(
 
 export async function getTask(taskId: string): Promise<PublicTaskState> {
   return jsonRequest<PublicTaskState>(`/tasks/${encodeURIComponent(taskId)}`);
+}
+
+export async function stageTaskFiles(taskId: string, files: File[]): Promise<StagedUpload[]> {
+  const body = new FormData();
+  files.forEach((file) => body.append("files", file, file.name));
+  const result = await jsonRequest<{ uploads: StagedUpload[] }>(
+    `/tasks/${encodeURIComponent(taskId)}/files`,
+    { method: "POST", body },
+  );
+  return result.uploads;
+}
+
+export async function sendTaskMessage(
+  taskId: string,
+  content: string,
+  attachmentUploadIds: string[],
+): Promise<TaskMessageAccepted> {
+  return jsonRequest<TaskMessageAccepted>(`/tasks/${encodeURIComponent(taskId)}/messages`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ content: content.trim() || null, attachment_upload_ids: attachmentUploadIds }),
+  });
+}
+
+export async function listTaskFiles(taskId: string): Promise<TaskFile[]> {
+  const result = await jsonRequest<{ files: TaskFile[] }>(
+    `/tasks/${encodeURIComponent(taskId)}/files`,
+  );
+  return result.files;
+}
+
+export async function deleteStagedFile(taskId: string, uploadId: string): Promise<void> {
+  const response = await fetch(
+    `/tasks/${encodeURIComponent(taskId)}/files/staged/${encodeURIComponent(uploadId)}`,
+    { method: "DELETE" },
+  );
+  if (!response.ok) throw await responseError(response);
 }
 
 export async function answerQuestion(

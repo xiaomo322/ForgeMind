@@ -31,6 +31,12 @@ from forgemind.schema.tasks import (
     TaskStatus,
     TaskStatusRecord,
 )
+from forgemind.schema.messages import (
+    StagedAttachmentRecord,
+    TaskMessageApplicationRecord,
+    TaskMessageRecord,
+    TaskMessageStateView,
+)
 from forgemind.state.sqlite_action_registry import SQLiteActionRegistry
 from forgemind.state.action_registry import DuplicateActionIdError
 from forgemind.state.sqlite_connection import open_sqlite_connection
@@ -227,6 +233,176 @@ class SQLiteForgeMindState:
     permission_decisions: SQLitePermissionDecisionRegistry
     edit_execution_plans: SQLiteEditExecutionPlanRegistry
     observations: SQLiteObservationRegistry
+
+    def record_staged_attachment(self, attachment: StagedAttachmentRecord) -> None:
+        with open_sqlite_connection(self.database_path) as connection:
+            connection.execute("PRAGMA foreign_keys = ON")
+            connection.execute(
+                "INSERT INTO staged_attachments (upload_id, task_id, payload_json) VALUES (?, ?, ?)",
+                (attachment.upload_id, attachment.task_id, attachment.model_dump_json()),
+            )
+
+    def get_staged_attachment(self, upload_id: str) -> StagedAttachmentRecord:
+        with open_sqlite_connection(self.database_path) as connection:
+            row = connection.execute(
+                "SELECT payload_json FROM staged_attachments WHERE upload_id = ?", (upload_id,)
+            ).fetchone()
+        if row is None:
+            raise KeyError(upload_id)
+        return StagedAttachmentRecord.model_validate_json(row[0])
+
+    def list_staged_attachments(self, task_id: str) -> tuple[StagedAttachmentRecord, ...]:
+        with open_sqlite_connection(self.database_path) as connection:
+            rows = connection.execute(
+                "SELECT payload_json FROM staged_attachments WHERE task_id=? ORDER BY upload_id",
+                (task_id,),
+            ).fetchall()
+        return tuple(StagedAttachmentRecord.model_validate_json(row[0]) for row in rows)
+
+    def delete_unreferenced_staged_attachment(self, task_id: str, upload_id: str) -> None:
+        with open_sqlite_connection(self.database_path) as connection:
+            connection.execute("PRAGMA foreign_keys = ON")
+            referenced = connection.execute(
+                "SELECT 1 FROM task_message_attachments WHERE upload_id=?", (upload_id,)
+            ).fetchone()
+            if referenced is not None:
+                raise ValueError("已被消息引用的附件不能删除")
+            deleted = connection.execute(
+                "DELETE FROM staged_attachments WHERE task_id=? AND upload_id=?",
+                (task_id, upload_id),
+            ).rowcount
+            if deleted != 1:
+                raise KeyError(upload_id)
+
+    def record_task_message(
+        self,
+        *,
+        message_id: str,
+        task_id: str,
+        content: str | None,
+        attachment_upload_ids: tuple[str, ...],
+        resume_status_id: str,
+    ) -> TaskMessageRecord:
+        with open_sqlite_connection(self.database_path) as connection:
+            connection.execute("PRAGMA foreign_keys = ON")
+            connection.execute("BEGIN IMMEDIATE")
+            if connection.execute("SELECT 1 FROM tasks WHERE task_id = ?", (task_id,)).fetchone() is None:
+                raise KeyError(task_id)
+            status_row = connection.execute(
+                "SELECT task_status_id, task_id, revision, status, payload_json FROM task_statuses WHERE task_id=? ORDER BY revision DESC LIMIT 1",
+                (task_id,),
+            ).fetchone()
+            if status_row is None:
+                raise KeyError(task_id)
+            current_status = SQLiteTaskStatusRegistry._restore(status_row[0], list(status_row[1:]))
+            if current_status.status is TaskStatus.CANCELLED:
+                raise RuntimeError("已取消任务不能继续")
+            for upload_id in attachment_upload_ids:
+                row = connection.execute(
+                    "SELECT task_id FROM staged_attachments WHERE upload_id = ?", (upload_id,)
+                ).fetchone()
+                if row is None:
+                    raise KeyError(upload_id)
+                if row[0] != task_id:
+                    raise ValueError("附件不属于当前任务")
+                if connection.execute(
+                    "SELECT 1 FROM task_message_attachments WHERE upload_id = ?", (upload_id,)
+                ).fetchone() is not None:
+                    raise ValueError("附件已经被其他消息引用")
+            sequence = connection.execute(
+                "SELECT COALESCE(MAX(sequence), 0) + 1 FROM task_messages WHERE task_id = ?",
+                (task_id,),
+            ).fetchone()[0]
+            message = TaskMessageRecord(
+                message_id=message_id,
+                task_id=task_id,
+                sequence=sequence,
+                content=content,
+                attachment_upload_ids=attachment_upload_ids,
+            )
+            connection.execute(
+                "INSERT INTO task_messages (message_id, task_id, sequence, payload_json) VALUES (?, ?, ?, ?)",
+                (message.message_id, task_id, sequence, message.model_dump_json()),
+            )
+            for upload_id in attachment_upload_ids:
+                connection.execute(
+                    "INSERT INTO task_message_attachments (message_id, upload_id) VALUES (?, ?)",
+                    (message.message_id, upload_id),
+                )
+            if current_status.status in {TaskStatus.COMPLETED, TaskStatus.BLOCKED}:
+                running = TaskStatusRecord(
+                    task_status_id=resume_status_id,
+                    task_id=task_id,
+                    revision=current_status.revision + 1,
+                    status=TaskStatus.RUNNING,
+                    reason="用户发送后续消息，继续同一任务",
+                )
+                connection.execute(
+                    "INSERT INTO task_statuses (task_status_id, task_id, revision, status, payload_json) VALUES (?, ?, ?, ?, ?)",
+                    (resume_status_id, task_id, running.revision, running.status.value, running.model_dump_json()),
+                )
+        return message
+
+    def record_message_application(self, application: TaskMessageApplicationRecord) -> None:
+        with open_sqlite_connection(self.database_path) as connection:
+            connection.execute("PRAGMA foreign_keys = ON")
+            connection.execute(
+                "INSERT INTO task_message_applications (message_id, task_id, payload_json) VALUES (?, ?, ?)",
+                (application.message_id, application.task_id, application.model_dump_json()),
+            )
+
+    def resume_for_followup(self, task_id: str, status_id: str) -> TaskStatusRecord | None:
+        """只允许用户后续消息把已完成或阻塞任务显式恢复。"""
+        with open_sqlite_connection(self.database_path) as connection:
+            connection.execute("PRAGMA foreign_keys = ON")
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute(
+                "SELECT task_status_id, task_id, revision, status, payload_json FROM task_statuses WHERE task_id=? ORDER BY revision DESC LIMIT 1",
+                (task_id,),
+            ).fetchone()
+            if row is None:
+                raise KeyError(task_id)
+            current = SQLiteTaskStatusRegistry._restore(row[0], list(row[1:]))
+            if current.status not in {TaskStatus.COMPLETED, TaskStatus.BLOCKED}:
+                return None
+            running = TaskStatusRecord(
+                task_status_id=status_id,
+                task_id=task_id,
+                revision=current.revision + 1,
+                status=TaskStatus.RUNNING,
+                reason="用户发送后续消息，继续同一任务",
+            )
+            connection.execute(
+                "INSERT INTO task_statuses (task_status_id, task_id, revision, status, payload_json) VALUES (?, ?, ?, ?, ?)",
+                (status_id, task_id, running.revision, running.status.value, running.model_dump_json()),
+            )
+            return running
+
+    def list_message_views(self, task_id: str) -> tuple[TaskMessageStateView, ...]:
+        with open_sqlite_connection(self.database_path) as connection:
+            rows = connection.execute(
+                "SELECT payload_json FROM task_messages WHERE task_id = ? ORDER BY sequence", (task_id,)
+            ).fetchall()
+            result: list[TaskMessageStateView] = []
+            for (payload,) in rows:
+                message = TaskMessageRecord.model_validate_json(payload)
+                app_row = connection.execute(
+                    "SELECT payload_json FROM task_message_applications WHERE message_id = ?",
+                    (message.message_id,),
+                ).fetchone()
+                attachments = tuple(
+                    StagedAttachmentRecord.model_validate_json(row[0])
+                    for row in connection.execute(
+                        "SELECT s.payload_json FROM staged_attachments s JOIN task_message_attachments m ON m.upload_id=s.upload_id WHERE m.message_id=? ORDER BY s.upload_id",
+                        (message.message_id,),
+                    ).fetchall()
+                )
+                result.append(TaskMessageStateView(
+                    message=message,
+                    application=(TaskMessageApplicationRecord.model_validate_json(app_row[0]) if app_row else None),
+                    attachments=attachments,
+                ))
+        return tuple(result)
 
     def record_task_completion(
         self,
@@ -1549,6 +1725,7 @@ class SQLiteForgeMindState:
             task=self.tasks.get(task_id),
             current_status=self.task_statuses.get_current(task_id),
             actions=tuple(action_states),
+            messages=self.list_message_views(task_id),
         )
 
     def create_task(
@@ -1655,6 +1832,35 @@ class SQLiteForgeMindState:
 
         # 第一步：调用 resolve()，把数据库路径统一成绝对路径。
         resolved_database_path = database_path.resolve()
+        resolved_database_path.parent.mkdir(parents=True, exist_ok=True)
+        with open_sqlite_connection(resolved_database_path) as connection:
+            connection.execute("PRAGMA foreign_keys = ON")
+            connection.executescript(
+                """
+                CREATE TABLE IF NOT EXISTS staged_attachments (
+                    upload_id TEXT PRIMARY KEY,
+                    task_id TEXT NOT NULL REFERENCES tasks(task_id),
+                    payload_json TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS task_messages (
+                    message_id TEXT PRIMARY KEY,
+                    task_id TEXT NOT NULL REFERENCES tasks(task_id),
+                    sequence INTEGER NOT NULL,
+                    payload_json TEXT NOT NULL,
+                    UNIQUE(task_id, sequence)
+                );
+                CREATE TABLE IF NOT EXISTS task_message_attachments (
+                    message_id TEXT NOT NULL REFERENCES task_messages(message_id),
+                    upload_id TEXT NOT NULL UNIQUE REFERENCES staged_attachments(upload_id),
+                    PRIMARY KEY(message_id, upload_id)
+                );
+                CREATE TABLE IF NOT EXISTS task_message_applications (
+                    message_id TEXT PRIMARY KEY REFERENCES task_messages(message_id),
+                    task_id TEXT NOT NULL REFERENCES tasks(task_id),
+                    payload_json TEXT NOT NULL
+                );
+                """
+            )
         # 第二步：先创建 Task Registry，再创建 Action Registry；后续会让
         # 每个 Action 的 task_id 引用已经持久化的任务。
         tasks = SQLiteTaskRegistry(resolved_database_path)

@@ -14,6 +14,7 @@ from forgemind.schema.permissions import (
     PendingPermissionRequest,
     PermissionDecisionRecord,
 )
+from forgemind.schema.messages import TaskMessageStateView
 
 
 class TaskRecord(StrictContractModel):
@@ -209,6 +210,7 @@ class TaskStateView(StrictContractModel):
     # 这个字段故意不提供默认值：State 构建视图时必须明确说明已经查询
     # Action 历史；没有 Action 应传入空元组，而不是遗漏字段。
     actions: tuple[ActionStateView, ...]
+    messages: tuple[TaskMessageStateView, ...] = ()
 
     @model_validator(mode="after")
     def require_same_task(self) -> Self:

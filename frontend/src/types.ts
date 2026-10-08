@@ -33,6 +33,44 @@ export interface PublicTaskState {
   status: TaskStatus;
   revision: number;
   actions: PublicActionState[];
+  messages?: PublicTaskMessage[];
+}
+
+export interface PublicAttachment {
+  upload_id: string;
+  path: string;
+  size_bytes: number;
+  sha256: string;
+  state: "active" | "staged";
+}
+
+export interface PublicTaskMessage {
+  message_id: string;
+  sequence: number;
+  content: string | null;
+  delivery: "queued" | "applied";
+  applied_after_action_sequence: number | null;
+  attachments: PublicAttachment[];
+}
+
+export interface StagedUpload extends PublicAttachment {
+  state: "staged";
+}
+
+export interface TaskFile {
+  upload_id?: string;
+  path: string;
+  size_bytes: number;
+  sha256: string;
+  state: "active" | "staged";
+}
+
+export interface TaskMessageAccepted {
+  message_id: string;
+  sequence: number;
+  delivery: "queued";
+  task_status: TaskStatus;
+  revision: number;
 }
 
 export interface AgentStepData {

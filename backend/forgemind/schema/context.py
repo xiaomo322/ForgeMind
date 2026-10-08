@@ -9,6 +9,7 @@ from forgemind.schema.tasks import (
     TaskRecord,
     TaskStatusRecord,
 )
+from forgemind.schema.messages import TaskMessageStateView
 
 
 class AgentTaskContext(StrictContractModel):
@@ -20,6 +21,10 @@ class AgentTaskContext(StrictContractModel):
     total_action_count: int = Field(ge=0)
     omitted_action_count: int = Field(ge=0)
     is_action_history_complete: bool
+    recent_messages: tuple[TaskMessageStateView, ...] = ()
+    total_message_count: int = Field(default=0, ge=0)
+    omitted_message_count: int = Field(default=0, ge=0)
+    is_message_history_complete: bool = True
 
     @model_validator(mode="after")
     def require_consistent_history_window(self) -> Self:
@@ -64,6 +69,13 @@ class AgentTaskContext(StrictContractModel):
 
         if actual_sequences != expected_sequences:
             raise ValueError("保留的 Action 不是连续的最新后缀")
+        if self.total_message_count != self.omitted_message_count + len(self.recent_messages):
+            raise ValueError("消息历史数量不一致")
+        if self.is_message_history_complete != (self.omitted_message_count == 0):
+            raise ValueError("消息历史完整标记不一致")
+        for item in self.recent_messages:
+            if item.message.task_id != self.task.task_id or item.application is None:
+                raise ValueError("Agent Context 只能包含当前任务已应用的消息")
         # 第六步：全部通过后返回 self。
         return self
 

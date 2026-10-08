@@ -4,6 +4,8 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 import sys
+from uuid import uuid4
+from typing import Any
 
 from forgemind.agent.loop import AgentLoopStepResult, run_agent_loop_step
 from forgemind.agent.turn import AgentModel
@@ -30,6 +32,7 @@ from forgemind.schema.tasks import (
     TaskStatusRecord,
 )
 from forgemind.state.sqlite_state import SQLiteForgeMindState
+from forgemind.schema.messages import TaskMessageApplicationRecord, TaskMessageRecord
 
 
 IdFactory = Callable[[], str]
@@ -54,6 +57,7 @@ class ForgeMindApplication:
     model: AgentModel
     max_action_count: int = 20
     allowed_programs: Mapping[str, Path] | None = None
+    workspace_store: Any | None = None
 
     def __post_init__(self) -> None:
         if self.allowed_programs is None:
@@ -89,6 +93,47 @@ class ForgeMindApplication:
     def get_task(self, task_id: str) -> TaskStateView:
         return self.state.get_task_view(task_id)
 
+    def send_message(
+        self,
+        task_id: str,
+        content: str | None,
+        attachment_upload_ids: tuple[str, ...] = (),
+    ) -> TaskMessageRecord:
+        current = self.state.task_statuses.get_current(task_id)
+        if current.status is TaskStatus.CANCELLED:
+            raise RuntimeError("已取消任务不能继续")
+        message = self.state.record_task_message(
+            message_id=f"message_{uuid4()}",
+            task_id=task_id,
+            content=content,
+            attachment_upload_ids=attachment_upload_ids,
+            resume_status_id=f"task_status_{uuid4()}",
+        )
+        return message
+
+    def apply_queued_messages(self, task_id: str) -> None:
+        views = self.state.list_message_views(task_id)
+        action_count = len(self.state.actions.list_for_task(task_id))
+        for item in views:
+            if item.application is not None:
+                continue
+            if item.attachments:
+                if self.workspace_store is None:
+                    raise RuntimeError("附件消息缺少 Workspace Store")
+                task = self.state.tasks.get(task_id)
+                from forgemind.web.workspaces import StagedWorkspaceFile
+                for attachment in item.attachments:
+                    staged = StagedWorkspaceFile(**attachment.model_dump())
+                    state = self.workspace_store.reconcile_publish(Path(task.project_root), staged)
+                    if state == "staged":
+                        self.workspace_store.publish(Path(task.project_root), staged)
+            self.state.record_message_application(TaskMessageApplicationRecord(
+                message_application_id=f"message_application_{uuid4()}",
+                message_id=item.message.message_id,
+                task_id=task_id,
+                applied_after_action_sequence=action_count,
+            ))
+
     def run_until_pause(
         self,
         task_id: str,
@@ -113,6 +158,7 @@ class ForgeMindApplication:
                 return ApplicationRunResult(
                     task_id, status, step_number - 1, last_step=last_step
                 )
+            self.apply_queued_messages(task_id)
             last_step = run_agent_loop_step(
                 task_id=task_id,
                 state=self.state,

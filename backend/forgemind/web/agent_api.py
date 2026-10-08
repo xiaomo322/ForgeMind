@@ -2,13 +2,16 @@
 
 from typing import Annotated
 from typing import Literal
+from uuid import uuid4
+from pathlib import Path
+from hashlib import sha256
 from _thread import LockType
 from threading import Lock
 
 from fastapi import FastAPI, File, HTTPException, Query, UploadFile
 from fastapi import status as http_status
 from fastapi.responses import StreamingResponse
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 
 from forgemind.application import ForgeMindApplication
 from forgemind.runtime.user_responses import (
@@ -41,7 +44,9 @@ from forgemind.web.workspaces import (
     WorkspaceUploadError,
     WorkspaceUploadTooLargeError,
     UnknownWorkspaceError,
+    StagedWorkspaceFile,
 )
+from forgemind.schema.messages import StagedAttachmentRecord
 
 
 class CreateTaskRequest(StrictContractModel):
@@ -105,6 +110,32 @@ class PermissionDecisionRequest(StrictContractModel):
         return value
 
 
+class CreateTaskMessageRequest(StrictContractModel):
+    content: str | None = None
+    attachment_upload_ids: list[str] = Field(default_factory=list)
+
+    @field_validator("content")
+    @classmethod
+    def normalize_empty_content(cls, value: str | None) -> str | None:
+        return None if value is not None and not value.strip() else value
+
+    @model_validator(mode="after")
+    def require_content_or_attachment(self):
+        if self.content is None and not self.attachment_upload_ids:
+            raise ValueError("消息必须包含文字或附件")
+        if len(set(self.attachment_upload_ids)) != len(self.attachment_upload_ids):
+            raise ValueError("附件编号不能重复")
+        return self
+
+
+class TaskMessageAccepted(StrictContractModel):
+    message_id: str
+    sequence: int
+    delivery: Literal["queued"] = "queued"
+    task_status: str
+    revision: int
+
+
 def create_agent_stream_app(
     application: ForgeMindApplication,
     workspace_store: FileSystemWorkspaceStore | None = None,
@@ -115,6 +146,8 @@ def create_agent_stream_app(
     app.add_middleware(WorkspaceUploadBodyLimitMiddleware)
     task_lease_guard = Lock()
     task_execution_leases: dict[str, LockType] = {}
+    if workspace_store is not None:
+        application.workspace_store = workspace_store
 
     def acquire_task_execution_lease(task_id: str) -> LockType | None:
         """同一进程内只允许一条 SSE 连接驱动一个任务。"""
@@ -332,6 +365,150 @@ def create_agent_stream_app(
             question_action_id=result.response.question_action_id,
             status=result.running_status.status.value,
             revision=result.running_status.revision,
+        )
+
+    @app.post("/tasks/{task_id}/files", status_code=http_status.HTTP_201_CREATED)
+    async def stage_task_files(
+        task_id: str,
+        files: Annotated[list[UploadFile], File(min_length=1)],
+    ) -> dict:
+        if workspace_store is None:
+            raise HTTPException(status_code=503, detail="workspace store is unavailable")
+        try:
+            task = application.get_task(task_id).task
+        except KeyError as error:
+            raise HTTPException(status_code=404, detail="task not found") from error
+        uploads: list[WorkspaceUpload] = []
+        try:
+            for file in files:
+                uploads.append(WorkspaceUpload(file.filename or "", await file.read(MAX_WORKSPACE_FILE_SIZE_BYTES + 1)))
+        finally:
+            for file in files:
+                await file.close()
+        try:
+            staged = workspace_store.stage(
+                task_id=task_id,
+                project_root=Path(task.project_root),
+                uploads=uploads,
+                next_upload_id=lambda: f"upload_{uuid4()}",
+            )
+            for item in staged:
+                application.state.record_staged_attachment(
+                    StagedAttachmentRecord(
+                        upload_id=item.upload_id,
+                        task_id=item.task_id,
+                        path=item.path,
+                        size_bytes=item.size_bytes,
+                        sha256=item.sha256,
+                        staging_token=item.staging_token,
+                    )
+                )
+        except DuplicateWorkspaceFilenameError as error:
+            raise HTTPException(status_code=409, detail=str(error)) from error
+        except UnsupportedWorkspaceFileTypeError as error:
+            raise HTTPException(status_code=415, detail=str(error)) from error
+        except (
+            WorkspaceFileTooLargeError,
+            WorkspaceUploadTooLargeError,
+            TooManyWorkspaceFilesError,
+        ) as error:
+            raise HTTPException(status_code=413, detail=str(error)) from error
+        except WorkspaceUploadError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
+        return {
+            "uploads": [
+                {
+                    "upload_id": item.upload_id,
+                    "path": item.path,
+                    "size_bytes": item.size_bytes,
+                    "sha256": item.sha256,
+                    "state": "staged",
+                }
+                for item in staged
+            ]
+        }
+
+    @app.get("/tasks/{task_id}/files")
+    def list_task_files(task_id: str) -> dict:
+        try:
+            task = application.get_task(task_id).task
+        except KeyError as error:
+            raise HTTPException(status_code=404, detail="task not found") from error
+        root = Path(task.project_root)
+        active = []
+        for path in sorted(root.glob("*.py"), key=lambda item: item.name.casefold()):
+            content = path.read_bytes()
+            active.append({
+                "path": path.name,
+                "size_bytes": len(content),
+                "sha256": sha256(content).hexdigest(),
+                "state": "active",
+            })
+        applied_ids = {
+            attachment.upload_id
+            for message in application.state.list_message_views(task_id)
+            if message.application is not None
+            for attachment in message.attachments
+        }
+        staged = [
+            {
+                "path": item.path,
+                "size_bytes": item.size_bytes,
+                "sha256": item.sha256,
+                "state": "staged",
+                "upload_id": item.upload_id,
+            }
+            for item in application.state.list_staged_attachments(task_id)
+            if item.upload_id not in applied_ids
+        ]
+        return {"files": active + staged, "file_count": len(active) + len(staged)}
+
+    @app.delete(
+        "/tasks/{task_id}/files/staged/{upload_id}",
+        status_code=http_status.HTTP_204_NO_CONTENT,
+    )
+    def delete_staged_task_file(task_id: str, upload_id: str) -> None:
+        if workspace_store is None:
+            raise HTTPException(status_code=503, detail="workspace store is unavailable")
+        try:
+            attachment = application.state.get_staged_attachment(upload_id)
+            if attachment.task_id != task_id:
+                raise KeyError(upload_id)
+            if any(
+                linked.upload_id == upload_id
+                for message in application.state.list_message_views(task_id)
+                for linked in message.attachments
+            ):
+                raise ValueError("已被消息引用的附件不能删除")
+            workspace_store.delete_staged(StagedWorkspaceFile(**attachment.model_dump()))
+            application.state.delete_unreferenced_staged_attachment(task_id, upload_id)
+        except KeyError as error:
+            raise HTTPException(status_code=404, detail="staged attachment not found") from error
+        except ValueError as error:
+            raise HTTPException(status_code=409, detail=str(error)) from error
+
+    @app.post(
+        "/tasks/{task_id}/messages",
+        response_model=TaskMessageAccepted,
+        status_code=http_status.HTTP_202_ACCEPTED,
+    )
+    def send_task_message(task_id: str, request: CreateTaskMessageRequest) -> TaskMessageAccepted:
+        try:
+            message = application.send_message(
+                task_id,
+                request.content,
+                tuple(request.attachment_upload_ids),
+            )
+            current = application.get_task(task_id).current_status
+        except KeyError as error:
+            raise HTTPException(status_code=404, detail="task or attachment not found") from error
+        except (ValueError, RuntimeError) as error:
+            raise HTTPException(status_code=409, detail=str(error)) from error
+        return TaskMessageAccepted(
+            message_id=message.message_id,
+            sequence=message.sequence,
+            task_status=current.status.value,
+            revision=current.revision,
         )
 
     return app

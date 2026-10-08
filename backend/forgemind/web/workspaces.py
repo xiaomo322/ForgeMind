@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
+from hashlib import sha256
 from pathlib import Path
 import re
 import shutil
@@ -63,12 +65,29 @@ class UnknownWorkspaceError(KeyError):
     pass
 
 
+class AttachmentPublishIntegrityError(RuntimeError):
+    pass
+
+
 @dataclass(frozen=True, slots=True)
 class WorkspaceUpload:
     """HTTP 层已经读取到内存、等待验证和持久化的单个文件。"""
 
     filename: str
     content: bytes
+
+
+@dataclass(frozen=True, slots=True)
+class StagedWorkspaceFile:
+    """已经可靠保存、但尚未进入活动 Workspace 的附件。"""
+
+    upload_id: str
+    task_id: str
+    path: str
+    size_bytes: int
+    sha256: str
+    # 这是服务端内部定位暂存字节的令牌，后续公开模型不能返回它。
+    staging_token: str
 
 
 class UploadedFileInfo(StrictContractModel):
@@ -130,6 +149,137 @@ class FileSystemWorkspaceStore:
             file_count=len(files),
             total_size_bytes=sum(file.size_bytes for file in files),
         )
+
+    def stage(
+        self,
+        *,
+        task_id: str,
+        project_root: Path,
+        uploads: Sequence[WorkspaceUpload],
+        next_upload_id: Callable[[], str],
+    ) -> tuple[StagedWorkspaceFile, ...]:
+        """保存附件，但在 Runtime 到达安全边界前不修改活动项目。"""
+
+        if not task_id.strip():
+            raise ValueError("task_id 不能只包含空白字符")
+
+        # project_root 必须是本 Store 创建并管理的 Workspace。这个检查防止
+        # 调用者把暂存附件错误地绑定到任意服务器目录。
+        resolved_project_root = project_root.resolve()
+        if (
+            resolved_project_root.parent != self._storage_root
+            or not resolved_project_root.is_dir()
+        ):
+            raise UnknownWorkspaceError(str(project_root))
+
+        validated = self._validate_uploads(uploads)
+        active_names = {
+            path.name.casefold()
+            for path in resolved_project_root.iterdir()
+            if path.is_file()
+        }
+        staging_prefix = f".staged-{resolved_project_root.name}-"
+        staged_names = {
+            path.name.casefold()
+            for directory in self._storage_root.glob(f"{staging_prefix}*")
+            if directory.is_dir()
+            for path in directory.iterdir()
+            if path.is_file()
+        }
+        if len(active_names | staged_names) + len(validated) > MAX_WORKSPACE_FILE_COUNT:
+            raise TooManyWorkspaceFilesError(
+                f"at most {MAX_WORKSPACE_FILE_COUNT} files are allowed"
+            )
+        for upload in validated:
+            if upload.filename.casefold() in active_names | staged_names:
+                raise DuplicateWorkspaceFilenameError(
+                    f"duplicate filename: {upload.filename}"
+                )
+        temporary_root = Path(mkdtemp(prefix=staging_prefix, dir=self._storage_root))
+        staged_files: list[StagedWorkspaceFile] = []
+
+        try:
+            for upload in validated:
+                upload_id = next_upload_id()
+                staged_path = temporary_root / upload.filename
+                staged_path.write_bytes(upload.content)
+                staged_files.append(
+                    StagedWorkspaceFile(
+                        upload_id=upload_id,
+                        task_id=task_id,
+                        path=upload.filename,
+                        size_bytes=len(upload.content),
+                        sha256=sha256(upload.content).hexdigest(),
+                        staging_token=f"{temporary_root.name}/{upload.filename}",
+                    )
+                )
+        except Exception:
+            shutil.rmtree(temporary_root, ignore_errors=True)
+            raise
+
+        return tuple(staged_files)
+
+    def publish(
+        self,
+        project_root: Path,
+        staged: StagedWorkspaceFile,
+    ) -> None:
+        """把一条权威暂存记录原子移动到活动 Workspace。"""
+
+        resolved_project_root = project_root.resolve()
+        if (
+            resolved_project_root.parent != self._storage_root
+            or not resolved_project_root.is_dir()
+        ):
+            raise UnknownWorkspaceError(str(project_root))
+        source = (self._storage_root / staged.staging_token).resolve()
+        if self._storage_root not in source.parents or not source.is_file():
+            raise AttachmentPublishIntegrityError("暂存附件不存在或路径无效")
+        if sha256(source.read_bytes()).hexdigest() != staged.sha256:
+            raise AttachmentPublishIntegrityError("暂存附件哈希不匹配")
+        destination = (resolved_project_root / staged.path).resolve()
+        if destination.parent != resolved_project_root:
+            raise AttachmentPublishIntegrityError("附件目标路径越界")
+        if destination.exists():
+            raise DuplicateWorkspaceFilenameError(
+                f"duplicate filename: {staged.path}"
+            )
+        source.replace(destination)
+        try:
+            source.parent.rmdir()
+        except OSError:
+            pass
+
+    def reconcile_publish(
+        self,
+        project_root: Path,
+        staged: StagedWorkspaceFile,
+    ) -> str:
+        """根据源、目标和哈希判断中断后的真实发布状态。"""
+
+        resolved_project_root = project_root.resolve()
+        source = (self._storage_root / staged.staging_token).resolve()
+        destination = (resolved_project_root / staged.path).resolve()
+        source_exists = source.is_file()
+        destination_exists = destination.is_file()
+        if source_exists and not destination_exists:
+            if sha256(source.read_bytes()).hexdigest() == staged.sha256:
+                return "staged"
+        elif destination_exists and not source_exists:
+            if sha256(destination.read_bytes()).hexdigest() == staged.sha256:
+                return "published"
+        raise AttachmentPublishIntegrityError("无法根据哈希确认附件发布状态")
+
+    def delete_staged(self, staged: StagedWorkspaceFile) -> None:
+        """删除尚未发布的暂存字节；已发布文件不能通过此入口删除。"""
+        source = (self._storage_root / staged.staging_token).resolve()
+        if self._storage_root not in source.parents or not source.is_file():
+            raise AttachmentPublishIntegrityError("暂存附件不存在或路径无效")
+        source.unlink()
+        try:
+            source.parent.rmdir()
+        except OSError:
+            pass
 
     def resolve(self, workspace_id: str) -> Path:
         """把公开 ID 还原为内部目录，并拒绝路径穿越和未知目录。"""

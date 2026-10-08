@@ -16,6 +16,7 @@ def build_agent_task_context(
     task_view: TaskStateView,
     *,
     max_action_count: int,
+    max_message_count: int = 20,
 ) -> AgentTaskContext:
     """保留最近 Action，并显式报告被省略的历史数量。"""
 
@@ -28,6 +29,8 @@ def build_agent_task_context(
         or max_action_count < 1
     ):
         raise InvalidActionContextLimitError(max_action_count)
+    if isinstance(max_message_count, bool) or not isinstance(max_message_count, int) or max_message_count < 1:
+        raise ValueError("max_message_count 必须是正整数")
     # 第二步：total_action_count = len(task_view.actions)。
     total_action_count = len(task_view.actions)
     # 第三步：recent_actions 取 task_view.actions 的最后
@@ -38,6 +41,9 @@ def build_agent_task_context(
 
     # 第五步：构造并返回 AgentTaskContext：task 和 current_status 直接
     # 来自 task_view；完整标记等于 omitted_action_count == 0。
+    applied_messages = tuple(item for item in task_view.messages if item.application is not None)
+    recent_messages = applied_messages[-max_message_count:]
+    omitted_message_count = len(applied_messages) - len(recent_messages)
     return AgentTaskContext(
         task=task_view.task,
         current_status=task_view.current_status,
@@ -45,4 +51,8 @@ def build_agent_task_context(
         total_action_count=total_action_count,
         omitted_action_count=omitted_action_count,
         is_action_history_complete=omitted_action_count == 0,
+        recent_messages=recent_messages,
+        total_message_count=len(applied_messages),
+        omitted_message_count=omitted_message_count,
+        is_message_history_complete=omitted_message_count == 0,
     )
