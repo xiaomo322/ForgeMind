@@ -15,12 +15,10 @@ export function StatusHeader({
   taskId,
   status,
   request,
-  onNewTask,
 }: {
   taskId: string;
   status: TaskUiStatus;
   request: string;
-  onNewTask: () => void;
 }) {
   return (
     <header className="task-header">
@@ -32,9 +30,6 @@ export function StatusHeader({
         <h1>{request}</h1>
         <code>{taskId}</code>
       </div>
-      <button className="secondary-button" type="button" onClick={onNewTask}>
-        新建任务
-      </button>
     </header>
   );
 }

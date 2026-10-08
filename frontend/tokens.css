@@ -1,24 +1,24 @@
-/* Hallmark · macrostructure: Workbench · tone: precise technical · anchor hue: cobalt */
+/* Hallmark · macrostructure: Workbench · tone: precise technical · anchor hue: lime */
 /* Hallmark · pre-emit critique: P5 H4 E4 S5 R5 V4 */
 :root {
-  --color-paper: oklch(98.5% 0.004 250);
-  --color-surface: oklch(100% 0 0);
-  --color-surface-muted: oklch(96.5% 0.006 250);
-  --color-ink: oklch(24% 0.02 258);
-  --color-ink-soft: oklch(43% 0.018 257);
-  --color-rule: oklch(88% 0.012 252);
-  --color-accent: oklch(58% 0.2 256);
-  --color-accent-hover: oklch(51% 0.2 256);
-  --color-accent-ink: oklch(99% 0.002 250);
-  --color-graphite: oklch(21% 0.016 260);
-  --color-graphite-soft: oklch(29% 0.018 260);
-  --color-on-dark: oklch(94% 0.008 250);
-  --color-success: oklch(55% 0.14 150);
-  --color-warning: oklch(66% 0.15 70);
-  --color-danger: oklch(54% 0.18 25);
-  --color-danger-soft: oklch(96% 0.025 25);
-  --color-warning-soft: oklch(96% 0.035 70);
-  --color-success-soft: oklch(96% 0.025 150);
+  --color-paper: oklch(15% 0.012 145);
+  --color-surface: oklch(20% 0.014 145);
+  --color-surface-muted: oklch(24% 0.016 145);
+  --color-ink: oklch(94% 0.012 145);
+  --color-ink-soft: oklch(70% 0.018 145);
+  --color-rule: oklch(32% 0.018 145);
+  --color-accent: oklch(88% 0.18 125);
+  --color-accent-hover: oklch(92% 0.15 125);
+  --color-accent-ink: oklch(19% 0.035 125);
+  --color-graphite: oklch(18% 0.012 145);
+  --color-graphite-soft: oklch(25% 0.016 145);
+  --color-on-dark: oklch(94% 0.012 145);
+  --color-success: oklch(82% 0.17 135);
+  --color-warning: oklch(78% 0.14 85);
+  --color-danger: oklch(70% 0.17 25);
+  --color-danger-soft: oklch(24% 0.06 25);
+  --color-warning-soft: oklch(24% 0.05 85);
+  --color-success-soft: oklch(22% 0.04 135);
   --font-display: "Space Grotesk", "Segoe UI", sans-serif;
   --font-body: Inter, "Segoe UI", sans-serif;
   --font-mono: "JetBrains Mono", "Cascadia Code", monospace;

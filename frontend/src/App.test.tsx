@@ -237,4 +237,58 @@ describe("ForgeMind App", () => {
     await user.click(screen.getByRole("button", { name: "继续运行" }));
     await waitFor(() => expect(mockedConnect).toHaveBeenCalledTimes(2));
   });
+
+  it("toggles the project files drawer from the header button", async () => {
+    window.history.replaceState({}, "", "/?task=task-files");
+    mockedGetTask.mockResolvedValue({
+      task_id: "task-files",
+      original_request: "检查项目文件",
+      status: "completed",
+      revision: 2,
+      actions: [],
+    });
+    mockedListFiles.mockResolvedValue([
+      {
+        path: "calculator.py",
+        size_bytes: 128,
+        sha256: "a".repeat(64),
+        state: "active",
+      },
+    ]);
+    const user = userEvent.setup();
+    render(<App />);
+
+    const trigger = await screen.findByRole("button", { name: "项目文件 · 1" });
+    await user.click(trigger);
+    expect(screen.getByRole("complementary", { name: "项目文件" })).toBeInTheDocument();
+
+    await user.click(trigger);
+    expect(screen.queryByRole("complementary", { name: "项目文件" })).not.toBeInTheDocument();
+  });
+
+  it("renders a long completion summary as readable body text", async () => {
+    const summary = "已完成读取与分析。这里包含文件定位、依赖说明和执行结果，不应整段显示成巨大的粗体标题。";
+    window.history.replaceState({}, "", "/?task=task-complete");
+    mockedGetTask.mockResolvedValue({
+      task_id: "task-complete",
+      original_request: "分析示例代码",
+      status: "completed",
+      revision: 2,
+      actions: [
+        {
+          sequence: 1,
+          action: { action_id: "complete-1", action_type: "complete", reason: "分析结束", summary },
+          user_response: null,
+          permission_request: null,
+          permission_decision: null,
+          observation: null,
+        },
+      ],
+    });
+    render(<App />);
+
+    expect(await screen.findByRole("heading", { name: "任务完成" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: summary })).not.toBeInTheDocument();
+    expect(screen.getAllByText(summary).some((node) => node.tagName === "P")).toBe(true);
+  });
 });

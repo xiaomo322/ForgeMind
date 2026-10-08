@@ -147,8 +147,22 @@ export function App() {
 
   return (
     <main className="workbench-shell conversation-shell">
-      <StatusHeader taskId={taskMeta.id} status={taskState.status} request={taskMeta.request} onNewTask={newTask} />
-      <button className="files-trigger" type="button" onClick={() => setFilesOpen(true)}>项目文件 · {files.length}</button>
+      <nav className="app-topbar" aria-label="ForgeMind 任务工具栏">
+        <div className="brand-lockup"><span className="brand-mark" aria-hidden="true">F</span><strong>ForgeMind</strong></div>
+        <div className="topbar-actions">
+          <button
+            className="files-trigger"
+            type="button"
+            aria-controls="project-files-drawer"
+            aria-expanded={filesOpen}
+            onClick={() => setFilesOpen((open) => !open)}
+          >
+            项目文件 · {files.length}
+          </button>
+          <button className="secondary-button compact-button" type="button" onClick={newTask}>新建任务</button>
+        </div>
+      </nav>
+      <StatusHeader taskId={taskMeta.id} status={taskState.status} request={taskMeta.request} />
       {pageError && <p className="page-error" role="alert">{pageError}</p>}
       <div className="conversation-column">
         <ConversationMessages originalRequest={taskMeta.request} messages={messages} />
@@ -156,7 +170,7 @@ export function App() {
         <div className="interaction-column conversation-interactions">
           {taskState.pendingQuestion && <UserPrompt prompt={taskState.pendingQuestion} disabled={interactionBusy} onSubmit={submitAnswer} />}
           {taskState.pendingPermission && <PermissionPrompt prompt={taskState.pendingPermission} disabled={interactionBusy} onDecision={submitPermission} />}
-          {taskState.summary && <aside className="completion-panel"><p className="machine-label">TASK COMPLETE</p><h2>{taskState.summary}</h2></aside>}
+          {taskState.summary && <aside className="completion-panel"><p className="machine-label">TASK COMPLETE</p><h2>任务完成</h2><p className="completion-summary">{taskState.summary}</p></aside>}
           {taskState.status === "paused" && <aside className="runtime-action-panel"><p className="machine-label">EXECUTION PAUSED</p><h2>本轮执行已暂停</h2><p>Agent 已用完本轮的执行步数。请先检查左侧记录，再决定是否继续下一批。</p><button className="primary-button" type="button" onClick={resumeTask}>继续运行</button></aside>}
           {taskState.status === "failed" && <aside className="runtime-action-panel runtime-action-panel--danger"><p className="machine-label">CONNECTION STOPPED</p><h2>本次执行未能继续</h2><p>{taskState.error}</p><button className="primary-button" type="button" onClick={resumeTask}>重试连接</button></aside>}
           {!taskState.pendingQuestion && !taskState.pendingPermission && !taskState.summary && taskState.status !== "paused" && taskState.status !== "failed" && <aside className="context-panel"><p className="machine-label">RUNTIME BOUNDARY</p><p>读取与搜索可直接执行；修改文件、运行命令和测试会在这里等待你的明确授权。</p></aside>}

@@ -131,3 +131,80 @@ pre { max-width: 100%; margin: var(--space-sm) 0 0; padding: var(--space-md); ov
 .files-drawer ul { list-style: none; margin: 0; padding: 8px; }.files-drawer li { display: grid; gap: 4px; padding: 11px 10px; border-radius: 10px; }.files-drawer li span,.files-drawer li code { color: #969d96; font-size: 11px; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); }
 @media (max-width: 900px) { .files-drawer { inset: 0; width: 100%; max-height: none; border-radius: 0; } .files-trigger { right: 12px; } }
+
+/* Task conversation: production dark workbench */
+.conversation-shell { width: 100%; min-height: 100vh; margin: 0; padding: 0 0 11rem; background: radial-gradient(circle at 50% 0, #1b211b 0, var(--color-paper) 34rem); }
+.app-topbar { position: sticky; top: 0; z-index: 25; display: flex; align-items: center; justify-content: space-between; gap: var(--space-md); min-height: 4.5rem; padding: 0 clamp(1rem, 3vw, 2.25rem); border-bottom: 1px solid var(--color-rule); background: color-mix(in oklab, var(--color-paper) 92%, transparent); backdrop-filter: blur(18px); }
+.brand-lockup { display: flex; align-items: center; gap: var(--space-sm); font-family: var(--font-display); font-size: 1.25rem; }
+.brand-mark { display: grid; width: 2rem; height: 2rem; place-items: center; border-radius: 0.55rem; background: var(--color-accent); color: var(--color-accent-ink); font-weight: 700; }
+.topbar-actions { display: flex; align-items: center; gap: var(--space-sm); }
+.files-trigger { position: static; padding: 0.55rem 0.9rem; border: 1px solid #46513f; border-radius: 999px; background: #20261d; color: #d9efbe; }
+.files-trigger[aria-expanded="true"] { border-color: var(--color-accent); background: var(--color-surface-muted); }
+.compact-button { min-height: 2.5rem; padding: 0.5rem 0.85rem; border-radius: 999px; }
+.task-header { width: min(68rem, calc(100% - 2rem)); margin: 0 auto; padding: 2.25rem 0 1.5rem; }
+.task-header h1 { max-width: 42rem; margin: 0.6rem 0 0.4rem; font-size: clamp(1.65rem, 3vw, 2.35rem); letter-spacing: -0.025em; }
+.task-header code { opacity: 0.7; }
+.conversation-column { width: min(64rem, calc(100% - 2rem)); }
+.conversation-messages { margin: 1.5rem 0 1.25rem; }
+.conversation-message { grid-template-columns: 2.25rem minmax(0, 1fr); }
+.conversation-message > div { max-width: 48rem; border-color: var(--color-rule); background: #202520; color: var(--color-ink); }
+.message-avatar { width: 2.1rem; height: 2.1rem; background: #34482c; color: var(--color-accent); font-weight: 700; }
+
+.timeline-panel { min-height: 0; padding: 0; border: 1px solid var(--color-rule); border-radius: 0.9rem; background: #151917; overflow: hidden; }
+.section-heading { align-items: center; padding: 1.15rem 1.3rem; }
+.section-heading h2 { font-size: 1.15rem; }
+.section-heading .machine-label { margin-bottom: 0.2rem; }
+.timeline-empty { min-height: 7rem; padding: 1.25rem; }
+.timeline-list { gap: 0; padding: 0; }
+.timeline-item { grid-template-columns: 2rem minmax(0, 1fr); gap: 0.75rem; padding: 1rem 1.25rem 0; }
+.timeline-index { padding-top: 0.15rem; color: var(--color-accent); }
+.timeline-item article { padding-bottom: 1rem; }
+.timeline-item h3 { margin: 0 0 0.45rem; color: var(--color-on-dark); font-family: var(--font-body); font-size: 0.98rem; font-weight: 600; line-height: 1.55; }
+.timeline-meta { align-items: center; margin-bottom: 0.45rem; }
+.timeline-result { margin: 0 0 0.55rem; color: var(--color-ink-soft); font-size: 0.88rem; overflow-wrap: anywhere; }
+.event-status { padding: 0.14rem 0.45rem; border: 1px solid var(--color-rule); border-radius: 999px; }
+.event-status--success { border-color: color-mix(in oklab, var(--color-success) 45%, transparent); color: var(--color-success); }
+.event-status--failed, .event-status--rejected { border-color: color-mix(in oklab, var(--color-danger) 45%, transparent); color: var(--color-danger); }
+.timeline-panel details summary { color: var(--color-ink-soft); font-size: 0.78rem; }
+.timeline-panel details[open] summary { margin-bottom: 0.5rem; color: var(--color-accent); }
+.terminal-note { margin: 0.85rem 1.25rem 1.1rem; border-radius: var(--radius-sm); color: var(--color-on-dark); font-size: 0.88rem; }
+
+.conversation-interactions { margin-top: 1rem; }
+.completion-panel { padding: 1.25rem 1.4rem; border: 1px solid color-mix(in oklab, var(--color-success) 35%, var(--color-rule)); border-top: 3px solid var(--color-success); background: #182219; }
+.completion-panel h2 { margin-bottom: 0.7rem; font-size: 1.2rem; }
+.completion-summary { max-width: 74ch; margin: 0; color: var(--color-ink); font-size: 0.98rem; font-weight: 400; line-height: 1.8; white-space: pre-wrap; overflow-wrap: anywhere; }
+.context-panel { background: var(--color-surface); }
+
+.message-composer { bottom: 1.25rem; width: min(64rem, calc(100% - 2rem)); border-color: #455044; background: #1a1f1b; box-shadow: 0 1.25rem 4rem #000c; }
+.message-composer textarea { min-height: 4rem; line-height: 1.55; }
+.composer-footer > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.drawer-backdrop { position: fixed; inset: 0; z-index: 29; border: 0; background: #0005; cursor: default; }
+.files-drawer { top: 4.9rem; right: 1.25rem; width: min(23rem, calc(100% - 2rem)); border-color: var(--color-rule); background: #171b18; }
+.files-drawer header { align-items: center; padding: 1rem 1.1rem; }
+.files-drawer header > div { display: grid; gap: 0.15rem; }
+.files-drawer header span { color: var(--color-ink-soft); font-size: 0.75rem; }
+.files-drawer header button { display: grid; width: 2rem; height: 2rem; place-items: center; border-radius: 50%; }
+.files-drawer header button:hover { background: var(--color-surface-muted); }
+.files-drawer li { grid-template-columns: minmax(0, 1fr) auto; border-bottom: 1px solid var(--color-rule); }
+.files-drawer li strong { min-width: 0; overflow-wrap: anywhere; }
+.files-drawer li > span:not(.file-state) { grid-column: 1 / -1; }
+.file-state { justify-self: end; color: var(--color-success); font-size: 0.72rem; }
+.file-state--staged { color: var(--color-warning); }
+.file-delete { grid-column: 1 / -1; justify-self: start; padding: 0; border: 0; background: transparent; color: var(--color-danger); font-size: 0.78rem; }
+.files-empty { margin: 0; padding: 2rem 1rem; color: var(--color-ink-soft); text-align: center; }
+
+@media (max-width: 700px) {
+  .app-topbar { align-items: flex-start; padding: 0.75rem; }
+  .brand-lockup strong { display: none; }
+  .topbar-actions { gap: 0.4rem; }
+  .files-trigger, .compact-button { font-size: 0.78rem; }
+  .task-header { width: min(100% - 1.5rem, 42rem); padding-top: 1.5rem; }
+  .task-header code { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+  .conversation-column { width: min(100% - 1.5rem, 42rem); }
+  .timeline-item { grid-template-columns: 1.5rem minmax(0, 1fr); padding-inline: 0.85rem; }
+  .timeline-meta { align-items: flex-start; }
+  .message-composer { width: calc(100% - 1rem); bottom: 0.5rem; }
+  .composer-footer > span { display: none; }
+  .files-drawer { inset: 0 0 0 auto; width: min(90vw, 23rem); max-height: none; border-radius: 0; }
+}
