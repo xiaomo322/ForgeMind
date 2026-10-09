@@ -10,6 +10,26 @@
 
 ForgeMind 将代码检索、文件读取、原子修改、测试执行和受控命令串成完整的 Agent 闭环。每一步操作都先转成严格数据契约，再由 Runtime 校验权限与项目边界，最后把真实执行结果写入 SQLite。浏览器可以持续查看 Agent 时间线、回答澄清问题、批准高风险操作，并在重启后恢复任务。
 
+## 产品演示
+
+[![播放 ForgeMind 63 秒端到端演示](docs/assets/demo-cover.png)](docs/assets/forgemind-demo.mp4)
+
+**[▶ 打开 63 秒完整演示视频](docs/assets/forgemind-demo.mp4)**
+
+演示覆盖项目 ZIP 上传、代码搜索与读取、修改授权、真实 pytest、结果持久化和工作区下载。为保证录制可以重复，模型 Decision 使用固定响应；FastAPI、React、SQLite、Runtime、Tool、权限判断、文件修改和测试执行均为真实链路。
+
+### 对话工作台
+
+![ForgeMind 对话工作台与实时执行过程](docs/assets/01-workbench-approval.png)
+
+### 搜索、修改与测试证据
+
+![ForgeMind 搜索、读取、修改与 pytest 执行时间线](docs/assets/02-execution-timeline.png)
+
+### Action 授权、项目文件与任务历史
+
+![ForgeMind Action 级授权、项目 ZIP 下载和 SQLite 任务历史](docs/assets/03-safety-workspace-history.png)
+
 ## 核心能力
 
 | 能力 | 实现 |

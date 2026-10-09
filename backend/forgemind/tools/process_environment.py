@@ -40,6 +40,8 @@ def build_safe_process_environment(
             "TMPDIR": temporary_path,
             "PYTHONUTF8": "1",
             "PYTHONIOENCODING": "utf-8",
+            # Tool 运行产生的字节码属于临时执行数据，不应污染或进入用户工作区 ZIP。
+            "PYTHONPYCACHEPREFIX": str((temporary_root / "pycache").resolve()),
         }
     )
     return environment

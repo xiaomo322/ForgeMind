@@ -283,6 +283,8 @@ def test_server_secrets_are_absent():
 
     assert result.test_outcome is Outcome.PASSED
     assert result.passed == 1
+    assert not any(path.name == "__pycache__" for path in tmp_path.rglob("*"))
+    assert not tuple(tmp_path.rglob("*.pyc"))
 
 
 def test_run_pytest_rejects_junit_report_over_limit(
