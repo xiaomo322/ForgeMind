@@ -1,4 +1,4 @@
-"""由学习者编写的 read_file Runtime 完整模块测试。"""
+"""read_file Runtime 的完整模块测试。"""
 
 from pathlib import Path
 

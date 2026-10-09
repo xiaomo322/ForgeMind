@@ -107,7 +107,7 @@ pre { max-width: 100%; margin: var(--space-sm) 0 0; padding: var(--space-md); ov
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
 }
 
-/* Codex-style persistent conversation */
+/* Persistent conversation layout */
 .conversation-shell { max-width: 100%; padding-bottom: 180px; }
 .conversation-column { width: min(880px, calc(100% - 32px)); margin: 0 auto; }
 .conversation-column .timeline, .conversation-column .interaction-column { width: 100%; }

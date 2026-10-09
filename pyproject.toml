@@ -28,9 +28,8 @@ dev = [
 [tool.pytest.ini_options]
 pythonpath = ["backend"]
 testpaths = ["tests"]
-# Windows 上部分 Python/IDE 无权访问用户级 pytest 临时目录。
-# IDE 使用独立目录，避免与 Codex 沙箱创建的受限临时目录争用 ACL。
-addopts = "--basetemp=.test-tmp/pytest-user"
+# 将 pytest 临时文件限制在项目目录，避免 Windows 用户级临时目录的 ACL 冲突。
+addopts = "--basetemp=.test-tmp"
 
 [tool.setuptools.packages.find]
 where = ["backend"]

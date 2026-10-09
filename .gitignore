@@ -11,3 +11,8 @@ build/
 .idea/
 .vscode/
 .forgemind/
+.forgemind-web/
+.env
+.uv-cache/
+coverage/
+htmlcov/
