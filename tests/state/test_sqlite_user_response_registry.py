@@ -21,12 +21,12 @@ from forgemind.state.user_response_registry import (
 )
 
 
-def create_task(state: SQLiteForgeMindState) -> None:
+def create_task(state: SQLiteForgeMindState, project_root: Path) -> None:
     state.create_task(
         TaskRecord(
             task_id="task-001",
             original_request="验证用户回答持久化",
-            project_root="C:/workspace/demo",
+            project_root=str(project_root.resolve()),
         ),
         TaskStatusRecord(
             task_status_id="task-status-001",
@@ -77,7 +77,7 @@ def open_registry(
 def test_response_survives_registry_restart(tmp_path: Path) -> None:
     database_path = tmp_path / "state.sqlite3"
     state, responses = open_registry(database_path)
-    create_task(state)
+    create_task(state, tmp_path / "workspace")
     state.actions.register(make_question())
     response = make_response()
 
@@ -91,7 +91,7 @@ def test_response_survives_registry_restart(tmp_path: Path) -> None:
 def test_unknown_question_is_rejected(tmp_path: Path) -> None:
     database_path = tmp_path / "state.sqlite3"
     state, responses = open_registry(database_path)
-    create_task(state)
+    create_task(state, tmp_path / "workspace")
 
     with pytest.raises(UnknownQuestionActionIdError):
         responses.record(make_response())
@@ -100,7 +100,7 @@ def test_unknown_question_is_rejected(tmp_path: Path) -> None:
 def test_tool_action_cannot_be_answered(tmp_path: Path) -> None:
     database_path = tmp_path / "state.sqlite3"
     state, responses = open_registry(database_path)
-    create_task(state)
+    create_task(state, tmp_path / "workspace")
     state.actions.register(
         AcceptedReadFileToolAction(
             action_id="action-question-001",
@@ -119,7 +119,7 @@ def test_tool_action_cannot_be_answered(tmp_path: Path) -> None:
 def test_question_link_mismatch_is_rejected(tmp_path: Path) -> None:
     database_path = tmp_path / "state.sqlite3"
     state, responses = open_registry(database_path)
-    create_task(state)
+    create_task(state, tmp_path / "workspace")
     state.actions.register(make_question())
 
     with pytest.raises(UserResponseQuestionMismatchError):
@@ -131,7 +131,7 @@ def test_duplicate_response_id_does_not_overwrite_disk_record(
 ) -> None:
     database_path = tmp_path / "state.sqlite3"
     state, responses = open_registry(database_path)
-    create_task(state)
+    create_task(state, tmp_path / "workspace")
     state.actions.register(make_question())
     state.actions.register(make_question("action-question-002"))
     original = make_response()
@@ -152,7 +152,7 @@ def test_second_response_for_same_question_does_not_overwrite(
 ) -> None:
     database_path = tmp_path / "state.sqlite3"
     state, responses = open_registry(database_path)
-    create_task(state)
+    create_task(state, tmp_path / "workspace")
     state.actions.register(make_question())
     original = make_response()
     second = make_response(response_id="response-002", selected_option="B")

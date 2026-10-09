@@ -53,7 +53,7 @@ def test_resolve_rejects_target_with_missing_part(
     assert captured.value.requested_target == target
 
 
-@pytest.mark.parametrize("target", ["../outside.py", "C:/outside.py"])
+@pytest.mark.parametrize("target", ["../outside.py"])
 def test_resolve_rejects_target_outside_project(
     tmp_path: Path,
     target: str,
@@ -63,6 +63,15 @@ def test_resolve_rejects_target_outside_project(
 
     with pytest.raises(UnsafeProjectPathError):
         resolve_test_target(root, target)
+
+
+def test_resolve_rejects_absolute_target_outside_project(tmp_path: Path) -> None:
+    root = tmp_path / "project"
+    root.mkdir()
+    outside_target = (tmp_path / "outside.py").resolve()
+
+    with pytest.raises(UnsafeProjectPathError):
+        resolve_test_target(root, str(outside_target))
 
 
 def test_resolve_does_not_claim_safe_missing_target_exists(

@@ -1,3 +1,4 @@
+import sys
 from pathlib import Path
 
 import pytest
@@ -17,6 +18,9 @@ from forgemind.tools.run_command import (
     CommandProcessStartError,
     CommandProcessTimeoutError,
 )
+
+
+PYTHON_EXECUTABLE = Path(sys.executable).resolve()
 
 
 def _action(
@@ -71,13 +75,13 @@ def _result(
         (
             "python",
             "../outside",
-            {"python": Path("C:/Python/python.exe")},
+            {"python": PYTHON_EXECUTABLE},
             ObservationErrorCode.PATH_OUTSIDE_PROJECT,
         ),
         (
             "node",
             ".",
-            {"python": Path("C:/Python/python.exe")},
+            {"python": PYTHON_EXECUTABLE},
             ObservationErrorCode.PROGRAM_NOT_ALLOWED,
         ),
         (
@@ -160,7 +164,7 @@ def test_tool_failure_is_recorded_as_failed(
     observation = execute_run_command_action(
         action,
         project_root=tmp_path,
-        allowed_programs={"python": Path("C:/Python/python.exe")},
+        allowed_programs={"python": PYTHON_EXECUTABLE},
         observations=observations,
     )
 
@@ -175,7 +179,7 @@ def test_nonzero_exit_code_is_recorded_as_success(
 ) -> None:
     action = _action()
     observations = _observations(action)
-    executable = Path("C:/Python/python.exe")
+    executable = PYTHON_EXECUTABLE
     expected = _result(action, executable, tmp_path.resolve())
     monkeypatch.setattr(
         run_command_execution,
@@ -201,11 +205,11 @@ def test_success_result_must_match_resolved_context(tmp_path: Path) -> None:
     context = run_command_execution.resolve_command_context(
         tmp_path,
         action.arguments,
-        allowed_programs={"python": Path("C:/Python/python.exe")},
+        allowed_programs={"python": PYTHON_EXECUTABLE},
     )
     mismatched = _result(
         action,
-        Path("C:/Other/python.exe"),
+        (tmp_path / "other-python").resolve(),
         tmp_path.resolve(),
     )
 
