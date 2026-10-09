@@ -30,6 +30,16 @@ ForgeMind 将代码检索、文件读取、原子修改、测试执行和受控�
 
 ![ForgeMind Action 级授权、项目 ZIP 下载和 SQLite 任务历史](docs/assets/03-safety-workspace-history.png)
 
+### 需求不明确时主动澄清
+
+当 `discount=20` 可能表示“优惠 20%”或“减免 20 元”时，Agent 不会自行猜测或继续修改，而是生成结构化 `ask_user` Decision。Runtime 将任务暂停在 `WAITING_USER`，界面展示问题依据和可选业务规则。
+
+![ForgeMind 在业务规则不明确时向用户提问确认](docs/assets/04-ambiguous-requirement-question.png)
+
+用户回答后，State 保存原始回答并恢复同一个任务。Agent 根据确认后的规则重新读取当前文件、申请修改与测试权限，并以真实 pytest 结果作为完成证据。
+
+![ForgeMind 根据用户确认完成修复并通过真实测试](docs/assets/05-ambiguous-requirement-result.png)
+
 ## 核心能力
 
 | 能力 | 实现 |
